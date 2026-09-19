@@ -14,10 +14,12 @@ type Controller struct {
 	service *Service
 }
 
+// Menginisialisasi instance baru identity controller.
 func NewController(service *Service) *Controller {
 	return &Controller{service: service}
 }
 
+// Menangani permintaan HTTP untuk autentikasi login pengguna dan penerbitan token.
 func (ctrl *Controller) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -41,6 +43,26 @@ func (ctrl *Controller) Login(c *gin.Context) {
 	})
 }
 
+// Menangani permintaan HTTP untuk pembaruan pasangan token akses menggunakan refresh token.
+func (ctrl *Controller) RefreshToken(c *gin.Context) {
+	var req RefreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid refresh token payload", err.Error())
+		return
+	}
+
+	tokens, err := ctrl.service.RefreshToken(c.Request.Context(), req.RefreshToken)
+	if err != nil {
+		response.Unauthorized(c, err.Error())
+		return
+	}
+
+	response.Success(c, http.StatusOK, "Token refreshed successfully", gin.H{
+		"tokens": tokens,
+	})
+}
+
+// Menangani permintaan HTTP untuk mengambil profil pengguna yang sedang terautentikasi.
 func (ctrl *Controller) GetMe(c *gin.Context) {
 	userIDVal, exists := c.Get(middleware.ContextUserIDKey)
 	if !exists {
@@ -62,6 +84,7 @@ func (ctrl *Controller) GetMe(c *gin.Context) {
 	response.Success(c, http.StatusOK, "User profile retrieved successfully", profile)
 }
 
+// Menangani permintaan HTTP untuk mengambil daftar seluruh master role sistem.
 func (ctrl *Controller) GetRoles(c *gin.Context) {
 	roles, err := ctrl.service.GetRoles(c.Request.Context())
 	if err != nil {

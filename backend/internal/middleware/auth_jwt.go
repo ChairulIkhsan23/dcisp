@@ -16,6 +16,7 @@ const (
 	ContextScopesKey = "scopes"
 )
 
+// Memvalidasi token JWT Bearer pada header request dan menyematkan data identitas pengguna ke dalam request context.
 func AuthJWT(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")

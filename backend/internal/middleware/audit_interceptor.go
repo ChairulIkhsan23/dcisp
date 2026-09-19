@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// Mencatat jejak audit keamanan pada tabel database untuk setiap operasi mutasi data sensitif.
 func AuditInterceptor(db *database.PostgresDB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()

@@ -20,7 +20,8 @@ Before implementing any feature, bugfix, or refactoring, you **MUST**:
 
 When writing or editing code, you **MUST**:
 * **Follow Established Tech Stack:** Use Golang Gin for backend, Next.js 15 (TypeScript) for frontend, PostgreSQL for storage, Redis for debouncing/caching.
-* **Follow Coding Standards:** Adhere strictly to `docs/CODING-STANDARDS.md` (idiomatic Go, strict TypeScript, no `any`, Neo-Brutalist design tokens).
+* **Follow Coding Standards:** Adhere strictly to `docs/guide/CODING-STANDARDS.md` (idiomatic Go, strict TypeScript, no `any`, Neo-Brutalist design tokens).
+* **Code Commenting Standard:** Setiap function, method, handler, service, repository, middleware, hook, dan utility wajib memiliki tepat satu kalimat komentar dalam bahasa Indonesia yang menjelaskan tujuan/tanggung jawabnya (`// + Kata kerja + objek/tujuan.`).
 * **Adhere to Database & API Contracts:** Do not add undocumented columns or change response JSON envelopes without specification alignment.
 * **Never Invent Business Rules:** If a requirement or formula is not defined in the PRD, check open questions or mark as `TBD`—never invent arbitrary calculations.
 * **Zero Invasive Surveillance Code:** Do NOT write code that captures screenshots, records keystrokes, scans desktop processes, or reads private chats (*BR-010*).

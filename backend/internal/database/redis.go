@@ -14,6 +14,7 @@ type RedisClient struct {
 	Client *redis.Client
 }
 
+// Menginisialisasi koneksi client ke Redis server.
 func NewRedisClient(cfg *config.Config) (*RedisClient, error) {
 	addr := fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort)
 
@@ -34,6 +35,7 @@ func NewRedisClient(cfg *config.Config) (*RedisClient, error) {
 	return &RedisClient{Client: rdb}, nil
 }
 
+// Menutup koneksi client Redis.
 func (r *RedisClient) Close() error {
 	if r.Client != nil {
 		return r.Client.Close()

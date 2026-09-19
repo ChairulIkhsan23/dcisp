@@ -104,20 +104,45 @@
 
 ---
 
-## 4. Comprehensive Naming Conventions
+## 5. Code Commenting Standards (Wajib Satu Kalimat Bahasa Indonesia)
 
-| Item Category | Convention | Pattern Example | Target Domain |
-|---|---|---|---|
-| **Go Package** | lowercase, single word | `package attendance`, `package finance` | Backend |
-| **Go Struct Model** | PascalCase | `type AttendanceEventLog struct` | Backend |
-| **Go Interface** | PascalCase | `type AttendanceService interface` | Backend |
-| **Go Function / Method** | PascalCase (exported), camelCase (internal) | `ProcessTap()`, `validateSchedule()` | Backend |
-| **Go Variable** | camelCase | `userRole`, `bountyAmount` | Backend |
-| **React Component** | PascalCase | `PlayerHudCockpit.tsx`, `NeoPixelCard.tsx` | Frontend |
-| **Custom Hook** | camelCase (`use*`) | `useWorkSession.ts`, `useLiveEvents.ts` | Frontend |
-| **TypeScript Type/Interface** | PascalCase | `type TapResult = { ... }`, `interface UserProfile` | Frontend |
-| **API Endpoint URL** | lowercase `kebab-case` with `/api/v1/` prefix | `/api/v1/attendance/terminal-tap` | API |
-| **Database Table** | lowercase `snake_case` plural | `attendance_event_logs`, `financial_ledgers` | PostgreSQL |
-| **Database Column** | lowercase `snake_case` singular | `planned_contribution_pct`, `device_id` | PostgreSQL |
-| **Database Trigger** | `trg_<action>_<table_name>` | `trg_immutable_financial_ledger` | PostgreSQL |
-| **CSS Class / Token** | `kebab-case` | `shadow-neo-md`, `border-neo-thick` | Styling |
+Setiap function, method, handler, service, repository method, custom hook, middleware, dan utility yang memiliki logic atau responsibility **wajib memiliki tepat satu kalimat komentar dalam bahasa Indonesia** tepat sebelum deklarasinya.
+
+### 5.1 Format Baku
+```text
+// + Kata kerja + objek/tujuan.
+```
+
+### 5.2 Contoh Penerapan
+* **Handler:**
+  ```go
+  // Menangani permintaan HTTP untuk autentikasi login pengguna dan menerbitkan token akses JWT.
+  func (ctrl *Controller) Login(c *gin.Context) { ... }
+  ```
+* **Service:**
+  ```go
+  // Memverifikasi kredensial email dan password serta menghasilkan pasangan token akses dan refresh.
+  func (s *Service) Login(ctx context.Context, email, password string) (*utils.TokenPair, *UserProfileResponse, error) { ... }
+  ```
+* **Repository:**
+  ```go
+  // Mengambil data pengguna aktif dari database berdasarkan alamat email.
+  func (r *Repository) FindByEmail(ctx context.Context, email string) (*User, error) { ... }
+  ```
+* **Middleware:**
+  ```go
+  // Memvalidasi token JWT Bearer pada header request dan menyematkan konteks identitas pengguna ke dalam request context.
+  func AuthJWT(cfg *config.Config) gin.HandlerFunc { ... }
+  ```
+* **TypeScript Hook / Action:**
+  ```typescript
+  // Mengelola timer aktif sesi kerja harian dan transisi status istirahat di sisi klien.
+  export function useWorkSession() { ... }
+  ```
+
+### 5.3 Checklist Komentar
+- [x] Tepat satu kalimat dan diakhiri tanda titik.
+- [x] Menggunakan bahasa Indonesia profesional dan alami.
+- [x] Menjawab *"Function ini digunakan untuk melakukan apa?"*.
+- [x] Tidak menjelaskan detail implementasi internal baris per baris.
+

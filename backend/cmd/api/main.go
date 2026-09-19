@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Menginisialisasi konfigurasi, koneksi database, routing middleware, dan menjalankan server HTTP Go backend.
 func main() {
 	log.Println("==========================================================")
 	log.Println("🚀 Starting DCISP Platform v1.0 — Golang Backend Server")
@@ -95,11 +96,11 @@ func main() {
 		}
 
 		c.JSON(status, gin.H{
-			"status":     "UP",
-			"database":   dbStatus,
-			"redis":      redisStatus,
-			"timestamp":  time.Now().UTC().Format(time.RFC3339),
-			"version":    "1.0.0",
+			"status":    "UP",
+			"database":  dbStatus,
+			"redis":     redisStatus,
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"version":   "1.0.0",
 		})
 	})
 
@@ -116,6 +117,7 @@ func main() {
 		authRoutes := apiV1.Group("/auth")
 		{
 			authRoutes.POST("/login", identityCtrl.Login)
+			authRoutes.POST("/refresh", identityCtrl.RefreshToken)
 
 			// Protected routes
 			protected := authRoutes.Group("")

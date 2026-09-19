@@ -27,6 +27,7 @@ var DefaultArgonParams = &ArgonParams{
 	KeyLength:   32,
 }
 
+// Menghasilkan hash kata sandi yang aman menggunakan algoritma Argon2id.
 func HashPassword(password string) (string, error) {
 	salt := make([]byte, DefaultArgonParams.SaltLength)
 	if _, err := rand.Read(salt); err != nil {
@@ -57,6 +58,7 @@ func HashPassword(password string) (string, error) {
 	return encoded, nil
 }
 
+// Memverifikasi kecocokan antara kata sandi teks polos dengan format hash Argon2id.
 func VerifyPassword(password, encodedHash string) (bool, error) {
 	parts := strings.Split(encodedHash, "$")
 	if len(parts) != 6 {

@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Menangkap panic pada aplikasi dan mengembalikan respons error 500 tanpa menghentikan server.
 func Recovery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {

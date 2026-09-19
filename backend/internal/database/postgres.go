@@ -14,6 +14,7 @@ type PostgresDB struct {
 	Pool *pgxpool.Pool
 }
 
+// Menginisialisasi connection pool ke database PostgreSQL.
 func NewPostgresDB(cfg *config.Config) (*PostgresDB, error) {
 	host := cfg.DBHost
 	if host == "localhost" {
@@ -55,6 +56,7 @@ func NewPostgresDB(cfg *config.Config) (*PostgresDB, error) {
 	return &PostgresDB{Pool: pool}, nil
 }
 
+// Menutup koneksi connection pool database PostgreSQL.
 func (db *PostgresDB) Close() {
 	if db.Pool != nil {
 		db.Pool.Close()

@@ -24,8 +24,8 @@ type Config struct {
 	JWTRefreshDurationDays   int
 }
 
+// Memuat seluruh konfigurasi aplikasi dari environment variable dan file .env.
 func LoadConfig() *Config {
-	// Load .env file if available (checks current dir, parent, and project root)
 	_ = godotenv.Load(".env")
 	_ = godotenv.Load("../.env")
 	_ = godotenv.Load("../../.env")
@@ -48,6 +48,7 @@ func LoadConfig() *Config {
 	}
 }
 
+// Mengambil nilai environment variable berdasarkan kunci dengan nilai bawaan sebagai cadangan.
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists && value != "" {
 		return value
@@ -55,6 +56,7 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+// Mengambil nilai environment variable dan mengonversinya menjadi tipe integer.
 func getEnvAsInt(key string, fallback int) int {
 	strValue := getEnv(key, "")
 	if value, err := strconv.Atoi(strValue); err == nil {

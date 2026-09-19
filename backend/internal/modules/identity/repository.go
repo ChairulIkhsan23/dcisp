@@ -6,18 +6,20 @@ import (
 	"fmt"
 
 	"dcisp/backend/internal/database"
-	"github.com/jackc/pgx/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type Repository struct {
 	db *database.PostgresDB
 }
 
+// Menginisialisasi instance baru identity repository.
 func NewRepository(db *database.PostgresDB) *Repository {
 	return &Repository{db: db}
 }
 
+// Mengambil data pengguna aktif dari database berdasarkan alamat email.
 func (r *Repository) FindByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
 		SELECT id, email, password_hash, full_name, avatar_file_id, status, created_at, updated_at
@@ -38,6 +40,7 @@ func (r *Repository) FindByEmail(ctx context.Context, email string) (*User, erro
 	return &u, nil
 }
 
+// Mengambil data pengguna dari database berdasarkan ID uniknya.
 func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	query := `
 		SELECT id, email, password_hash, full_name, avatar_file_id, status, created_at, updated_at
@@ -58,6 +61,7 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*User, error) 
 	return &u, nil
 }
 
+// Mengambil nama role aktif dan cakupan scope yang dimiliki oleh pengguna.
 func (r *Repository) GetUserRoleAndScopes(ctx context.Context, userID uuid.UUID) (string, []string, error) {
 	query := `
 		SELECT r.name, COALESCE(s.scope_type, 'OWN_DATA')
@@ -79,6 +83,7 @@ func (r *Repository) GetUserRoleAndScopes(ctx context.Context, userID uuid.UUID)
 	return roleName, []string{scopeType}, nil
 }
 
+// Mengambil daftar izin akses spesifik yang dimiliki oleh pengguna.
 func (r *Repository) GetUserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	query := `
 		SELECT DISTINCT CONCAT(p.resource, ':', p.action)
@@ -103,6 +108,7 @@ func (r *Repository) GetUserPermissions(ctx context.Context, userID uuid.UUID) (
 	return perms, nil
 }
 
+// Mengambil seluruh daftar master role sistem dari database.
 func (r *Repository) GetAllRoles(ctx context.Context) ([]Role, error) {
 	query := `SELECT id, name, description, is_system FROM roles ORDER BY name ASC`
 	rows, err := r.db.Pool.Query(ctx, query)

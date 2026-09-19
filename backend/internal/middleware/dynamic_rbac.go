@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// Mengevaluasi hak akses dan batasan scope pengguna secara dinamis dari database pada setiap permintaan resource.
 func RequirePermission(db *database.PostgresDB, resource, action string, requiredScopeTypes ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userIDVal, exists := c.Get(ContextUserIDKey)

@@ -31,13 +31,17 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *database.PostgresDB, *config.C
 	ctrl := identity.NewController(service)
 
 	r := gin.New()
-	r.POST("/api/v1/auth/login", ctrl.Login)
-
-	protected := r.Group("/api/v1/auth")
-	protected.Use(middleware.AuthJWT(cfg))
+	authGroup := r.Group("/api/v1/auth")
 	{
-		protected.GET("/me", ctrl.GetMe)
-		protected.GET("/roles", middleware.RequirePermission(db, "system.roles", "view", "SYSTEM"), ctrl.GetRoles)
+		authGroup.POST("/login", ctrl.Login)
+		authGroup.POST("/refresh", ctrl.RefreshToken)
+
+		protected := authGroup.Group("")
+		protected.Use(middleware.AuthJWT(cfg))
+		{
+			protected.GET("/me", ctrl.GetMe)
+			protected.GET("/roles", middleware.RequirePermission(db, "system.roles", "view", "SYSTEM"), ctrl.GetRoles)
+		}
 	}
 
 	return r, db, cfg
@@ -151,7 +155,8 @@ func TestSuperAdminLoginAndProfile(t *testing.T) {
 		Success bool `json:"success"`
 		Data    struct {
 			Tokens struct {
-				AccessToken string `json:"access_token"`
+				AccessToken  string `json:"access_token"`
+				RefreshToken string `json:"refresh_token"`
 			} `json:"tokens"`
 			Profile struct {
 				Role string `json:"role"`
@@ -162,6 +167,7 @@ func TestSuperAdminLoginAndProfile(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 	assert.NotEmpty(t, resp.Data.Tokens.AccessToken)
+	assert.NotEmpty(t, resp.Data.Tokens.RefreshToken)
 	assert.Equal(t, "SUPER_ADMIN", resp.Data.Profile.Role)
 
 	// 2. Test Protected /me Endpoint
@@ -171,4 +177,17 @@ func TestSuperAdminLoginAndProfile(t *testing.T) {
 	r.ServeHTTP(wMe, reqMe)
 
 	assert.Equal(t, http.StatusOK, wMe.Code)
+
+	// 3. Test Refresh Token Endpoint
+	refreshPayload := map[string]string{
+		"refresh_token": resp.Data.Tokens.RefreshToken,
+	}
+	refreshBody, _ := json.Marshal(refreshPayload)
+
+	reqRefresh, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewBuffer(refreshBody))
+	reqRefresh.Header.Set("Content-Type", "application/json")
+	wRefresh := httptest.NewRecorder()
+	r.ServeHTTP(wRefresh, reqRefresh)
+
+	assert.Equal(t, http.StatusOK, wRefresh.Code)
 }

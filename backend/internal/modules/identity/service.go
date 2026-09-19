@@ -21,10 +21,12 @@ type Service struct {
 	cfg  *config.Config
 }
 
+// Menginisialisasi instance baru identity service.
 func NewService(repo *Repository, cfg *config.Config) *Service {
 	return &Service{repo: repo, cfg: cfg}
 }
 
+// Memverifikasi kredensial login pengguna dan menghasilkan token akses JWT serta token refresh.
 func (s *Service) Login(ctx context.Context, email, password string) (*utils.TokenPair, *UserProfileResponse, error) {
 	user, err := s.repo.FindByEmail(ctx, email)
 	if err != nil {
@@ -75,6 +77,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*utils.Tok
 	return tokens, profile, nil
 }
 
+// Mengambil informasi profil lengkap, role, scope, dan permission pengguna.
 func (s *Service) GetUserProfile(ctx context.Context, userID uuid.UUID) (*UserProfileResponse, error) {
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
@@ -105,6 +108,35 @@ func (s *Service) GetUserProfile(ctx context.Context, userID uuid.UUID) (*UserPr
 	}, nil
 }
 
+// Menghasilkan pasangan token baru menggunakan token refresh yang valid.
+func (s *Service) RefreshToken(ctx context.Context, refreshTokenString string) (*utils.TokenPair, error) {
+	claims, err := utils.ValidateToken(s.cfg.JWTSecret, refreshTokenString)
+	if err != nil {
+		return nil, errors.New("invalid or expired refresh token")
+	}
+
+	user, err := s.repo.FindByID(ctx, claims.UserID)
+	if err != nil || user == nil {
+		return nil, errors.New("user not found or inactive")
+	}
+
+	role, scopes, err := s.repo.GetUserRoleAndScopes(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return utils.GenerateTokenPair(
+		s.cfg.JWTSecret,
+		s.cfg.JWTAccessDurationMinutes,
+		s.cfg.JWTRefreshDurationDays,
+		user.ID,
+		user.Email,
+		role,
+		scopes,
+	)
+}
+
+// Mengambil seluruh daftar role master dari repository.
 func (s *Service) GetRoles(ctx context.Context) ([]Role, error) {
 	return s.repo.GetAllRoles(ctx)
 }

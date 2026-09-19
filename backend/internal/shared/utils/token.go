@@ -24,6 +24,7 @@ type TokenPair struct {
 	TokenType    string `json:"token_type"`
 }
 
+// Menghasilkan pasangan token akses JWT berdurasi 15 menit dan token refresh berdurasi 7 hari.
 func GenerateTokenPair(secret string, accessMinutes, refreshDays int, userID uuid.UUID, email, role string, scopes []string) (*TokenPair, error) {
 	now := time.Now()
 	accessExpiry := now.Add(time.Duration(accessMinutes) * time.Minute)
@@ -72,6 +73,7 @@ func GenerateTokenPair(secret string, accessMinutes, refreshDays int, userID uui
 	}, nil
 }
 
+// Memvalidasi keabsahan token JWT dan mengekstrak data klaim identitas pengguna.
 func ValidateToken(secret, tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -85,6 +87,11 @@ func ValidateToken(secret, tokenString string) (*JWTClaims, error) {
 	}
 
 	if claims, ok := token.Claims.(*JWTClaims); ok && token.Valid {
+		if claims.UserID == uuid.Nil && claims.Subject != "" {
+			if parsed, err := uuid.Parse(claims.Subject); err == nil {
+				claims.UserID = parsed
+			}
+		}
 		if claims.UserID == uuid.Nil {
 			return nil, errors.New("invalid token payload: user_id missing")
 		}
