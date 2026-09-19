@@ -1,0 +1,58 @@
+-- ============================================================================
+-- DCISP PLATFORM v1.0 — INITIAL DATABASE SCHEMA MIGRATION (DOWN)
+-- ============================================================================
+
+DROP TRIGGER IF EXISTS trg_immutable_xp_transactions ON xp_transactions;
+DROP TRIGGER IF EXISTS trg_immutable_audit_logs ON audit_logs;
+DROP TRIGGER IF EXISTS trg_immutable_financial_ledger ON financial_ledgers;
+DROP TRIGGER IF EXISTS trg_immutable_attendance ON attendance_event_logs;
+DROP FUNCTION IF EXISTS enforce_immutable_records();
+
+DROP TABLE IF EXISTS portfolios CASCADE;
+DROP TABLE IF EXISTS certificates CASCADE;
+DROP TABLE IF EXISTS notifications CASCADE;
+DROP TABLE IF EXISTS system_settings CASCADE;
+DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS financial_ledgers CASCADE;
+DROP TABLE IF EXISTS payouts CASCADE;
+DROP TABLE IF EXISTS wallet_transactions CASCADE;
+DROP TABLE IF EXISTS deduction_tax_rules CASCADE;
+DROP TABLE IF EXISTS batch_funds CASCADE;
+DROP TABLE IF EXISTS wallets CASCADE;
+DROP TABLE IF EXISTS reward_claims CASCADE;
+DROP TABLE IF EXISTS rewards CASCADE;
+DROP TABLE IF EXISTS performance_evaluations CASCADE;
+DROP TABLE IF EXISTS user_achievements CASCADE;
+DROP TABLE IF EXISTS achievements CASCADE;
+DROP TABLE IF EXISTS xp_transactions CASCADE;
+DROP TABLE IF EXISTS xp_rules CASCADE;
+DROP TABLE IF EXISTS policies CASCADE;
+DROP TABLE IF EXISTS evidence CASCADE;
+DROP TABLE IF EXISTS work_reports CASCADE;
+DROP TABLE IF EXISTS tasks CASCADE;
+DROP TABLE IF EXISTS milestones CASCADE;
+DROP TABLE IF EXISTS project_teams CASCADE;
+DROP TABLE IF EXISTS project_applications CASCADE;
+DROP TABLE IF EXISTS projects CASCADE;
+DROP TABLE IF EXISTS attendance_corrections CASCADE;
+DROP TABLE IF EXISTS leave_requests CASCADE;
+DROP TABLE IF EXISTS overtime_requests CASCADE;
+DROP TABLE IF EXISTS breaks CASCADE;
+DROP TABLE IF EXISTS work_sessions CASCADE;
+DROP TABLE IF EXISTS attendance_event_logs CASCADE;
+DROP TABLE IF EXISTS holidays CASCADE;
+DROP TABLE IF EXISTS work_schedules CASCADE;
+DROP TABLE IF EXISTS devices CASCADE;
+DROP TABLE IF EXISTS file_metadata CASCADE;
+DROP TABLE IF EXISTS user_skills CASCADE;
+DROP TABLE IF EXISTS skills CASCADE;
+DROP TABLE IF EXISTS alumni CASCADE;
+DROP TABLE IF EXISTS interns CASCADE;
+DROP TABLE IF EXISTS ranks CASCADE;
+DROP TABLE IF EXISTS batches CASCADE;
+DROP TABLE IF EXISTS institutions CASCADE;
+DROP TABLE IF EXISTS user_roles CASCADE;
+DROP TABLE IF EXISTS permissions CASCADE;
+DROP TABLE IF EXISTS scopes CASCADE;
+DROP TABLE IF EXISTS roles CASCADE;
+DROP TABLE IF EXISTS users CASCADE;

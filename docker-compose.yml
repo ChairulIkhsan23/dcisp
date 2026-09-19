@@ -1,0 +1,57 @@
+# ==============================================================================
+# DCISP Platform v1.0 — Local Infrastructure Services
+# Services: PostgreSQL 16 (Primary ACID Database) & Redis 7 (Cache & Queue Broker)
+# ==============================================================================
+
+services:
+  # Primary Relational Database (PostgreSQL 16)
+  # Menampung 48 tabel ACID, trigger append-only, dan ledger finansial
+  postgres:
+    image: postgres:16-alpine
+    container_name: dcisp_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_secret_pass}
+      POSTGRES_DB: ${DB_NAME:-dcisp_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-dcisp_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dcisp_network
+
+  # In-Memory Cache & Message Broker (Redis 7)
+  # Digunakan untuk debouncing scan presensi (30s), rate limiter, dan Asynq queue
+  redis:
+    image: redis:7-alpine
+    container_name: dcisp_redis
+    restart: always
+    ports:
+      - "${REDIS_PORT:-6381}:6379" # Host port 6381 dipetakan ke container port 6379
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dcisp_network
+
+# Persistent Storage Volumes
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# Isolated Bridge Network
+networks:
+  dcisp_network:
+    driver: bridge
