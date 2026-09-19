@@ -15,7 +15,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_secret_pass}
       POSTGRES_DB: ${DB_NAME:-dcisp_db}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${DB_PORT:-5434}:5432" # Host port 5434 dipetakan ke container port 5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
