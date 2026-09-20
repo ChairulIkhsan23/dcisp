@@ -65,9 +65,9 @@ func (a *ProjectsContributionAdapter) GetDistributionMembers(ctx context.Context
 			FinalPct: *m.FinalContributionPct,
 			IsLocked: m.IsLocked,
 		}
-		// Petakan batch anggota untuk akumulasi kas bersama (BRULE-FIN-002)
-		if intern, err := a.peopleRepo.GetInternByUserID(ctx, m.UserID); err == nil && intern != nil {
-			dm.BatchID = intern.BatchID
+		// Petakan batch anggota untuk akumulasi kas bersama (BRULE-FIN-002) langsung dari hasil JOIN
+		if m.BatchID != nil {
+			dm.BatchID = *m.BatchID
 			dm.HasBatch = true
 		}
 		input.Members = append(input.Members, dm)

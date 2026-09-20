@@ -201,35 +201,51 @@ func (r *Repository) CreateEventLog(ctx context.Context, ev *AttendanceEventLog)
 	return cmdTag.RowsAffected() > 0, nil
 }
 
-// Memeriksa apakah pengguna telah memiliki rekaman CHECK_IN yang sah pada tanggal tertentu.
+// Memeriksa apakah pengguna telah memiliki rekaman CHECK_IN yang sah pada tanggal tertentu secara SARGable.
 func (r *Repository) HasCheckInToday(ctx context.Context, userID uuid.UUID, targetDate time.Time) (bool, error) {
+	loc := targetDate.Location()
+	if loc == nil || loc == time.UTC {
+		loc = time.FixedZone("WIB", 7*3600)
+	}
+	tInLoc := targetDate.In(loc)
+	startOfDay := time.Date(tInLoc.Year(), tInLoc.Month(), tInLoc.Day(), 0, 0, 0, 0, loc).UTC()
+	endOfDay := startOfDay.Add(24 * time.Hour)
+
 	query := `
 		SELECT COUNT(*)
 		FROM attendance_event_logs
 		WHERE user_id = $1
 		  AND event_type = 'CHECK_IN'
-		  AND (timestamp AT TIME ZONE 'Asia/Jakarta')::date = $2::date
+		  AND timestamp >= $2 AND timestamp < $3
 	`
 	var count int
-	err := r.db.Pool.QueryRow(ctx, query, userID, targetDate.Format("2006-01-02")).Scan(&count)
+	err := r.db.Pool.QueryRow(ctx, query, userID, startOfDay, endOfDay).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("gagal memeriksa check-in harian: %w", err)
 	}
 	return count > 0, nil
 }
 
-// Mengambil event presensi terakhir pengguna pada hari tertentu untuk mengevaluasi mode cerdas (AUTO).
+// Mengambil event presensi terakhir pengguna pada hari tertentu untuk mengevaluasi mode cerdas (AUTO) secara SARGable.
 func (r *Repository) GetLatestEventForUserToday(ctx context.Context, userID uuid.UUID, targetDate time.Time) (*AttendanceEventLog, error) {
+	loc := targetDate.Location()
+	if loc == nil || loc == time.UTC {
+		loc = time.FixedZone("WIB", 7*3600)
+	}
+	tInLoc := targetDate.In(loc)
+	startOfDay := time.Date(tInLoc.Year(), tInLoc.Month(), tInLoc.Day(), 0, 0, 0, 0, loc).UTC()
+	endOfDay := startOfDay.Add(24 * time.Hour)
+
 	query := `
 		SELECT id, user_id, device_id, event_type, timestamp, method, location_context, session_id, idempotency_key, metadata, created_at
 		FROM attendance_event_logs
 		WHERE user_id = $1
-		  AND (timestamp AT TIME ZONE 'Asia/Jakarta')::date = $2::date
+		  AND timestamp >= $2 AND timestamp < $3
 		ORDER BY timestamp DESC
 		LIMIT 1
 	`
 	var ev AttendanceEventLog
-	err := r.db.Pool.QueryRow(ctx, query, userID, targetDate.Format("2006-01-02")).Scan(
+	err := r.db.Pool.QueryRow(ctx, query, userID, startOfDay, endOfDay).Scan(
 		&ev.ID, &ev.UserID, &ev.DeviceID, &ev.EventType, &ev.Timestamp, &ev.Method, &ev.LocationContext, &ev.SessionID, &ev.IdempotencyKey, &ev.Metadata, &ev.CreatedAt,
 	)
 	if err != nil {

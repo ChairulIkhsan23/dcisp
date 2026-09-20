@@ -132,8 +132,9 @@ type ProjectTeamMember struct {
 	CreatedAt              time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at" db:"updated_at"`
 
-	MemberFullName string `json:"member_full_name,omitempty"`
-	MemberEmail    string `json:"member_email,omitempty"`
+	MemberFullName string     `json:"member_full_name,omitempty"`
+	MemberEmail    string     `json:"member_email,omitempty"`
+	BatchID        *uuid.UUID `json:"batch_id,omitempty"`
 }
 
 // Entitas Milestone Target Fase Proyek

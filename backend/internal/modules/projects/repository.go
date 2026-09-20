@@ -379,9 +379,10 @@ func (r *Repository) GetTeamMember(ctx context.Context, projectID, userID uuid.U
 func (r *Repository) ListTeamMembers(ctx context.Context, projectID uuid.UUID) ([]ProjectTeamMember, error) {
 	query := `
 		SELECT pt.id, pt.project_id, pt.user_id, pt.project_role, pt.responsibility, pt.planned_contribution_pct, pt.actual_contribution_pct, pt.final_contribution_pct, pt.is_locked, pt.created_at, pt.updated_at,
-		       u.full_name, u.email
+		       u.full_name, u.email, i.batch_id
 		FROM project_teams pt
 		JOIN users u ON u.id = pt.user_id
+		LEFT JOIN interns i ON i.user_id = pt.user_id
 		WHERE pt.project_id = $1
 		ORDER BY pt.created_at ASC
 	`
@@ -396,7 +397,7 @@ func (r *Repository) ListTeamMembers(ctx context.Context, projectID uuid.UUID) (
 		var m ProjectTeamMember
 		if err := rows.Scan(
 			&m.ID, &m.ProjectID, &m.UserID, &m.ProjectRole, &m.Responsibility, &m.PlannedContributionPct, &m.ActualContributionPct, &m.FinalContributionPct, &m.IsLocked, &m.CreatedAt, &m.UpdatedAt,
-			&m.MemberFullName, &m.MemberEmail,
+			&m.MemberFullName, &m.MemberEmail, &m.BatchID,
 		); err == nil {
 			list = append(list, m)
 		}
