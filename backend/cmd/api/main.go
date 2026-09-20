@@ -16,6 +16,7 @@ import (
 	"dcisp/backend/internal/modules/documents"
 	"dcisp/backend/internal/modules/identity"
 	"dcisp/backend/internal/modules/people"
+	"dcisp/backend/internal/modules/projects"
 	"dcisp/backend/internal/modules/system"
 	"dcisp/backend/internal/shared/eventbus"
 	"dcisp/backend/internal/shared/response"
@@ -75,6 +76,10 @@ func main() {
 	attendanceRepo := attendance.NewRepository(db)
 	attendanceService := attendance.NewService(attendanceRepo, db, rdb, cfg, auditService, eventBus)
 	attendanceCtrl := attendance.NewController(attendanceService)
+
+	projectsRepo := projects.NewRepository(db)
+	projectsService := projects.NewService(projectsRepo, db, storageService, auditService, eventBus)
+	projectsCtrl := projects.NewController(projectsService)
 
 	policyRepo := system.NewPolicyRepository(db)
 	policyService := system.NewPolicyService(policyRepo, rdb)
@@ -288,6 +293,48 @@ func main() {
 			workSessionRoutes.POST("/start", attendanceCtrl.StartWorkSession)
 			workSessionRoutes.POST("/break", attendanceCtrl.ProcessBreak)
 			workSessionRoutes.POST("/end", attendanceCtrl.EndWorkSession)
+		}
+
+		// Projects & Marketplace (Domain 4: FR-016 s/d FR-024)
+		projectsRoutes := apiV1.Group("/projects")
+		projectsRoutes.Use(middleware.AuthJWT(cfg))
+		{
+			// Marketplace & Projects (FR-016, T-045)
+			projectsRoutes.POST("", middleware.RequirePermission(db, rdb, "projects.marketplace", "create", "ASSIGNED_PROJECTS"), projectsCtrl.CreateProject)
+			projectsRoutes.GET("", projectsCtrl.ListProjects)
+			projectsRoutes.GET("/:id", projectsCtrl.GetProjectByID)
+			projectsRoutes.PUT("/:id", middleware.RequirePermission(db, rdb, "projects.marketplace", "update", "ASSIGNED_PROJECTS"), projectsCtrl.UpdateProject)
+
+			// Applications & Quota (FR-017, T-046)
+			projectsRoutes.POST("/:id/apply", projectsCtrl.ApplyProject)
+			projectsRoutes.GET("/:id/applications", middleware.RequirePermission(db, rdb, "projects.applications", "view", "ASSIGNED_PROJECTS"), projectsCtrl.ListApplications)
+			projectsRoutes.PATCH("/applications/:id/review", middleware.RequirePermission(db, rdb, "projects.applications", "review", "ASSIGNED_PROJECTS"), projectsCtrl.ReviewApplication)
+
+			// Teams & Planned Contribution (FR-019, T-047)
+			projectsRoutes.GET("/:id/team", projectsCtrl.ListTeamMembers)
+			projectsRoutes.POST("/:id/planned-contributions", middleware.RequirePermission(db, rdb, "projects.team", "update", "ASSIGNED_PROJECTS"), projectsCtrl.FinalizePlannedContribution)
+
+			// Milestones (FR-020, T-048)
+			projectsRoutes.POST("/:id/milestones", middleware.RequirePermission(db, rdb, "projects.milestones", "create", "ASSIGNED_PROJECTS"), projectsCtrl.CreateMilestone)
+			projectsRoutes.GET("/:id/milestones", projectsCtrl.ListMilestones)
+
+			// Tasks Kanban (FR-021, T-049)
+			projectsRoutes.POST("/:id/tasks", middleware.RequirePermission(db, rdb, "projects.tasks", "create", "ASSIGNED_PROJECTS"), projectsCtrl.CreateTask)
+			projectsRoutes.GET("/:id/tasks", projectsCtrl.ListTasks)
+
+			// Three-Layer Contribution (FR-024, T-052)
+			projectsRoutes.GET("/:id/actual-contributions", projectsCtrl.CalculateActualContribution)
+			projectsRoutes.POST("/:id/final-contributions", middleware.RequirePermission(db, rdb, "projects.contribution", "finalize", "ASSIGNED_PROJECTS"), projectsCtrl.FinalizeContribution)
+		}
+
+		// Tasks & Submissions (FR-021, FR-022, FR-023, T-049, T-050, T-051)
+		tasksRoutes := apiV1.Group("/tasks")
+		tasksRoutes.Use(middleware.AuthJWT(cfg))
+		{
+			tasksRoutes.GET("/:id", projectsCtrl.GetTaskByID)
+			tasksRoutes.PATCH("/:id/status", projectsCtrl.ChangeTaskStatus)
+			tasksRoutes.POST("/:id/submissions", projectsCtrl.SubmitWorkReport)
+			tasksRoutes.PATCH("/submissions/:id/review", middleware.RequirePermission(db, rdb, "tasks.submissions", "review", "ASSIGNED_TASKS"), projectsCtrl.ReviewWorkReport)
 		}
 	}
 
