@@ -1,4 +1,4 @@
-package people
+package apiindonesia
 
 import (
 	"context"
@@ -9,20 +9,17 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"dcisp/backend/internal/integrations"
 )
 
-// Sumber data eksternal institusi yang didukung.
-const (
-	InstitutionSourceManual       = "MANUAL"
-	InstitutionSourceAPIKampus    = "API_KAMPUS"
-	InstitutionSourceAPISekolah   = "API_SEKOLAH"
-	InstitutionSourceAPIINDONESIA = "API_INDONESIA"
-)
+// ProviderName adalah nama unik provider API Indonesia pada registry integrasi.
+const ProviderName = "api-indonesia"
 
 // Respons external DTO dari API Indonesia untuk direktori kampus (GET /api/v1/kampus).
 // Field diselaraskan dengan respons produksi aktual: lat/lng dan created_at/updated_at
 // sengaja tidak dipetakan karena tidak ada kolom padanannya pada tabel institutions.
-type APIIndonesiaKampus struct {
+type Kampus struct {
 	ID            string  `json:"id"`
 	Name          string  `json:"name"`
 	ShortName     *string `json:"short_name"`
@@ -42,7 +39,7 @@ type APIIndonesiaKampus struct {
 }
 
 // Respons external DTO dari API Indonesia untuk direktori sekolah (GET /api/v1/sekolah).
-type APIIndonesiaSekolah struct {
+type Sekolah struct {
 	NPSN          string  `json:"npsn"`
 	Name          string  `json:"name"`
 	Jenis         string  `json:"jenis"`
@@ -60,7 +57,7 @@ type APIIndonesiaSekolah struct {
 }
 
 // Amplop paginasi generik dari API Indonesia.
-type APIIndonesiaMeta struct {
+type Meta struct {
 	Total      int `json:"total"`
 	Page       int `json:"page"`
 	PerPage    int `json:"per_page"`
@@ -68,19 +65,27 @@ type APIIndonesiaMeta struct {
 }
 
 // Klien HTTP khusus untuk Public API API Indonesia (https://use.apiindonesia.id).
-type APIIndonesiaClient struct {
+type Client struct {
 	baseURL    string
 	apiKey     string
 	httpClient *http.Client
 }
 
+// Memastikan Client memenuhi kontrak Provider pada registry integrasi.
+var _ integrations.Provider = (*Client)(nil)
+
+// Mengembalikan nama unik provider untuk registrasi pada integrations.Registry.
+func (c *Client) Name() string {
+	return ProviderName
+}
+
 // Menginisialisasi klien HTTP API Indonesia dengan timeout ketat 10 detik.
-func NewAPIIndonesiaClient(baseURL, apiKey string) *APIIndonesiaClient {
+func NewClient(baseURL, apiKey string) *Client {
 	trimmed := strings.TrimRight(baseURL, "/")
 	if trimmed == "" {
 		trimmed = "https://use.apiindonesia.id"
 	}
-	return &APIIndonesiaClient{
+	return &Client{
 		baseURL: trimmed,
 		apiKey:  apiKey,
 		httpClient: &http.Client{
@@ -90,7 +95,7 @@ func NewAPIIndonesiaClient(baseURL, apiKey string) *APIIndonesiaClient {
 }
 
 // Memeriksa ketersediaan kredensial API Indonesia sebelum melakukan permintaan eksternal.
-func (c *APIIndonesiaClient) requireAPIKey() error {
+func (c *Client) requireAPIKey() error {
 	if strings.TrimSpace(c.apiKey) == "" {
 		return fmt.Errorf("kredensial API Indonesia belum dikonfigurasi (API_INDONESIA_KEY kosong)")
 	}
@@ -98,7 +103,7 @@ func (c *APIIndonesiaClient) requireAPIKey() error {
 }
 
 // Mengeksekusi permintaan GET terautentikasi ke API Indonesia dan mengembalikan body mentah.
-func (c *APIIndonesiaClient) doGet(ctx context.Context, path string, query url.Values) ([]byte, int, error) {
+func (c *Client) doGet(ctx context.Context, path string, query url.Values) ([]byte, int, error) {
 	if err := c.requireAPIKey(); err != nil {
 		return nil, 0, err
 	}
@@ -125,13 +130,13 @@ func (c *APIIndonesiaClient) doGet(ctx context.Context, path string, query url.V
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return body, resp.StatusCode, mapAPIIndonesiaHTTPError(resp.StatusCode, body)
+		return body, resp.StatusCode, mapHTTPError(resp.StatusCode, body)
 	}
 	return body, resp.StatusCode, nil
 }
 
 // Memetakan kode status HTTP API Indonesia menjadi pesan kesalahan yang aman bagi klien.
-func mapAPIIndonesiaHTTPError(statusCode int, body []byte) error {
+func mapHTTPError(statusCode int, body []byte) error {
 	var errEnvelope struct {
 		Error struct {
 			Code    string `json:"code"`
@@ -180,12 +185,12 @@ type SearchKampusParams struct {
 
 // Hasil pencarian kampus beserta metadata paginasi.
 type SearchKampusResult struct {
-	Items []APIIndonesiaKampus `json:"items"`
-	Meta  APIIndonesiaMeta     `json:"meta"`
+	Items []Kampus `json:"items"`
+	Meta  Meta     `json:"meta"`
 }
 
 // Mencari direktori kampus pada API Indonesia berdasarkan nama, wilayah, jenis, dan kelompok.
-func (c *APIIndonesiaClient) SearchKampus(ctx context.Context, params SearchKampusParams) (*SearchKampusResult, error) {
+func (c *Client) SearchKampus(ctx context.Context, params SearchKampusParams) (*SearchKampusResult, error) {
 	query := url.Values{}
 	if strings.TrimSpace(params.Query) != "" {
 		query.Set("q", strings.TrimSpace(params.Query))
@@ -218,8 +223,8 @@ func (c *APIIndonesiaClient) SearchKampus(ctx context.Context, params SearchKamp
 		return nil, err
 	}
 	var envelope struct {
-		Data []APIIndonesiaKampus `json:"data"`
-		Meta APIIndonesiaMeta     `json:"meta"`
+		Data []Kampus `json:"data"`
+		Meta Meta     `json:"meta"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return nil, fmt.Errorf("respons kampus API Indonesia tidak valid: %w", err)
@@ -228,7 +233,7 @@ func (c *APIIndonesiaClient) SearchKampus(ctx context.Context, params SearchKamp
 }
 
 // Mengambil detail satu kampus dari API Indonesia berdasarkan ID eksternal.
-func (c *APIIndonesiaClient) GetKampusDetail(ctx context.Context, externalID string) (*APIIndonesiaKampus, error) {
+func (c *Client) GetKampusDetail(ctx context.Context, externalID string) (*Kampus, error) {
 	if strings.TrimSpace(externalID) == "" {
 		return nil, fmt.Errorf("ID kampus eksternal wajib diisi")
 	}
@@ -237,7 +242,7 @@ func (c *APIIndonesiaClient) GetKampusDetail(ctx context.Context, externalID str
 		return nil, err
 	}
 	var envelope struct {
-		Data APIIndonesiaKampus `json:"data"`
+		Data Kampus `json:"data"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return nil, fmt.Errorf("respons detail kampus API Indonesia tidak valid: %w", err)
@@ -261,12 +266,12 @@ type SearchSekolahParams struct {
 
 // Hasil pencarian sekolah beserta metadata paginasi.
 type SearchSekolahResult struct {
-	Items []APIIndonesiaSekolah `json:"items"`
-	Meta  APIIndonesiaMeta      `json:"meta"`
+	Items []Sekolah `json:"items"`
+	Meta  Meta      `json:"meta"`
 }
 
 // Mencari direktori sekolah pada API Indonesia berdasarkan nama, NPSN, wilayah, dan jenjang.
-func (c *APIIndonesiaClient) SearchSekolah(ctx context.Context, params SearchSekolahParams) (*SearchSekolahResult, error) {
+func (c *Client) SearchSekolah(ctx context.Context, params SearchSekolahParams) (*SearchSekolahResult, error) {
 	query := url.Values{}
 	if strings.TrimSpace(params.Query) != "" {
 		query.Set("q", strings.TrimSpace(params.Query))
@@ -299,8 +304,8 @@ func (c *APIIndonesiaClient) SearchSekolah(ctx context.Context, params SearchSek
 		return nil, err
 	}
 	var envelope struct {
-		Data []APIIndonesiaSekolah `json:"data"`
-		Meta APIIndonesiaMeta      `json:"meta"`
+		Data []Sekolah `json:"data"`
+		Meta Meta      `json:"meta"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return nil, fmt.Errorf("respons sekolah API Indonesia tidak valid: %w", err)
@@ -309,7 +314,7 @@ func (c *APIIndonesiaClient) SearchSekolah(ctx context.Context, params SearchSek
 }
 
 // Mengambil detail satu sekolah dari API Indonesia berdasarkan NPSN.
-func (c *APIIndonesiaClient) GetSekolahDetail(ctx context.Context, npsn string) (*APIIndonesiaSekolah, error) {
+func (c *Client) GetSekolahDetail(ctx context.Context, npsn string) (*Sekolah, error) {
 	if strings.TrimSpace(npsn) == "" {
 		return nil, fmt.Errorf("NPSN sekolah wajib diisi")
 	}
@@ -318,7 +323,7 @@ func (c *APIIndonesiaClient) GetSekolahDetail(ctx context.Context, npsn string) 
 		return nil, err
 	}
 	var envelope struct {
-		Data APIIndonesiaSekolah `json:"data"`
+		Data Sekolah `json:"data"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return nil, fmt.Errorf("respons detail sekolah API Indonesia tidak valid: %w", err)
@@ -327,61 +332,4 @@ func (c *APIIndonesiaClient) GetSekolahDetail(ctx context.Context, npsn string) 
 		return nil, fmt.Errorf("data sekolah tidak ditemukan pada API Indonesia")
 	}
 	return &envelope.Data, nil
-}
-
-// Memetakan respons kampus eksternal menjadi draf institusi internal tanpa menyimpan kredensial eksternal.
-func MapKampusToInstitutionDraft(ext *APIIndonesiaKampus) *Institution {
-	inst := &Institution{
-		Name:   ext.Name,
-		Source: strPtr(InstitutionSourceAPIKampus),
-	}
-	externalID := "kampus:" + ext.ID
-	inst.ExternalID = &externalID
-	parts := []string{}
-	if ext.Address != nil && strings.TrimSpace(*ext.Address) != "" {
-		parts = append(parts, strings.TrimSpace(*ext.Address))
-	}
-	if ext.RegencyName != nil && strings.TrimSpace(*ext.RegencyName) != "" {
-		parts = append(parts, strings.TrimSpace(*ext.RegencyName))
-	}
-	if ext.ProvinceName != nil && strings.TrimSpace(*ext.ProvinceName) != "" {
-		parts = append(parts, strings.TrimSpace(*ext.ProvinceName))
-	}
-	if len(parts) > 0 {
-		joined := strings.Join(parts, ", ")
-		inst.Address = &joined
-	}
-	if ext.Phone != nil && strings.TrimSpace(*ext.Phone) != "" {
-		inst.Phone = ext.Phone
-	}
-	if ext.Email != nil && strings.TrimSpace(*ext.Email) != "" {
-		inst.Email = ext.Email
-	}
-	return inst
-}
-
-// Memetakan respons sekolah eksternal menjadi draf institusi internal.
-func MapSekolahToInstitutionDraft(ext *APIIndonesiaSekolah) *Institution {
-	inst := &Institution{
-		Name:   ext.Name,
-		Source: strPtr(InstitutionSourceAPISekolah),
-	}
-	externalID := "sekolah:" + ext.NPSN
-	inst.ExternalID = &externalID
-	if ext.Address != nil {
-		inst.Address = ext.Address
-	}
-	if ext.Phone != nil {
-		inst.Phone = ext.Phone
-	}
-	if ext.Email != nil {
-		inst.Email = ext.Email
-	}
-	return inst
-}
-
-// Mengembalikan pointer string untuk nilai opsional.
-func strPtr(s string) *string {
-	copied := s
-	return &copied
 }

@@ -11,6 +11,8 @@ import (
 
 	"dcisp/backend/internal/config"
 	"dcisp/backend/internal/database"
+	"dcisp/backend/internal/integrations"
+	"dcisp/backend/internal/integrations/apiindonesia"
 	"dcisp/backend/internal/middleware"
 	"dcisp/backend/internal/modules/attendance"
 	"dcisp/backend/internal/modules/documents"
@@ -70,9 +72,16 @@ func main() {
 	auditService := system.NewAuditService(db)
 	auditCtrl := system.NewAuditController(auditService)
 
+	// Registry API eksternal: daftarkan setiap provider di sini agar modul domain
+	// cukup mengonsumsi instance terdaftar (contoh: api-indonesia, provider lain menyusul).
+	externalRegistry := integrations.NewRegistry()
+	apiIndonesiaClient := apiindonesia.NewClient(cfg.APIIndonesiaBaseURL, cfg.APIIndonesiaKey)
+	if err := externalRegistry.Register(apiIndonesiaClient); err != nil {
+		log.Fatalf("Fatal: Registrasi provider API eksternal gagal: %v", err)
+	}
+
 	peopleRepo := people.NewRepository(db)
 	peopleService := people.NewService(peopleRepo, db, auditService, eventBus)
-	apiIndonesiaClient := people.NewAPIIndonesiaClient(cfg.APIIndonesiaBaseURL, cfg.APIIndonesiaKey)
 	peopleService.SetExternalDependencies(apiIndonesiaClient, rdb)
 	peopleCtrl := people.NewController(peopleService)
 

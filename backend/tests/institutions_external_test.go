@@ -11,6 +11,7 @@ import (
 
 	"dcisp/backend/internal/config"
 	"dcisp/backend/internal/database"
+	"dcisp/backend/internal/integrations/apiindonesia"
 	"dcisp/backend/internal/modules/people"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -108,18 +109,18 @@ func TestAPIIndonesiaClientKampusAndErrors(t *testing.T) {
 	mockServer := newMockAPIIndonesiaServer()
 	defer mockServer.Close()
 
-	client := people.NewAPIIndonesiaClient(mockServer.URL, "aip_live_test_key")
+	client := apiindonesia.NewClient(mockServer.URL, "aip_live_test_key")
 	ctx := context.Background()
 
 	// 1. Pencarian sukses
-	res, err := client.SearchKampus(ctx, people.SearchKampusParams{Query: "teknologi", Page: 1, PerPage: 20})
+	res, err := client.SearchKampus(ctx, apiindonesia.SearchKampusParams{Query: "teknologi", Page: 1, PerPage: 20})
 	require.NoError(t, err)
 	require.Len(t, res.Items, 1)
 	assert.Equal(t, "pt_001", res.Items[0].ID)
 	assert.Equal(t, "INSTITUT TEKNOLOGI BANDUNG", res.Items[0].Name)
 
 	// 2. Respons kosong
-	emptyRes, err := client.SearchKampus(ctx, people.SearchKampusParams{Query: "kosong-tidak-ada-hasil-xyz"})
+	emptyRes, err := client.SearchKampus(ctx, apiindonesia.SearchKampusParams{Query: "kosong-tidak-ada-hasil-xyz"})
 	require.NoError(t, err)
 	assert.Len(t, emptyRes.Items, 0)
 
@@ -133,14 +134,14 @@ func TestAPIIndonesiaClientKampusAndErrors(t *testing.T) {
 	assert.Equal(t, "info@itb.ac.id", *detail.Email)
 
 	// 4. Kredensial kosong ditolak sebelum request jaringan
-	badClient := people.NewAPIIndonesiaClient(mockServer.URL, "")
-	_, err = badClient.SearchKampus(ctx, people.SearchKampusParams{Query: "itb"})
+	badClient := apiindonesia.NewClient(mockServer.URL, "")
+	_, err = badClient.SearchKampus(ctx, apiindonesia.SearchKampusParams{Query: "itb"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "API_INDONESIA_KEY")
 
 	// 5. Header auth hilang dari server mock menghasilkan 401 yang dipetakan aman
-	noAuthClient := people.NewAPIIndonesiaClient(mockServer.URL, "   ")
-	_, err = noAuthClient.SearchSekolah(ctx, people.SearchSekolahParams{Query: "sma"})
+	noAuthClient := apiindonesia.NewClient(mockServer.URL, "   ")
+	_, err = noAuthClient.SearchSekolah(ctx, apiindonesia.SearchSekolahParams{Query: "sma"})
 	assert.Error(t, err)
 }
 
@@ -152,7 +153,7 @@ func TestAPIIndonesiaMapperToInternalDraft(t *testing.T) {
 	address := "Jl. Ganesha No. 10"
 	phone := "0222500935"
 	email := "info@itb.ac.id"
-	ext := &people.APIIndonesiaKampus{
+	ext := &apiindonesia.Kampus{
 		ID: "pt_001", Name: "INSTITUT TEKNOLOGI BANDUNG", ShortName: &shortName,
 		Jenis: "institut", Kelompok: "PTN", ProvinceID: "32", RegencyID: "3273",
 		Address: &address, Phone: &phone, Email: &email,
@@ -170,7 +171,7 @@ func TestAPIIndonesiaMapperToInternalDraft(t *testing.T) {
 	require.NotNil(t, draft.Email)
 	assert.Equal(t, "info@itb.ac.id", *draft.Email)
 
-	sekolahExt := &people.APIIndonesiaSekolah{NPSN: "20219557", Name: "SMA NEGERI 3 BANDUNG", Jenis: "SMA", Status: "Negeri"}
+	sekolahExt := &apiindonesia.Sekolah{NPSN: "20219557", Name: "SMA NEGERI 3 BANDUNG", Jenis: "SMA", Status: "Negeri"}
 	sekolahDraft := people.MapSekolahToInstitutionDraft(sekolahExt)
 	assert.Equal(t, "sekolah:20219557", *sekolahDraft.ExternalID)
 }
@@ -190,7 +191,7 @@ func TestImportExternalInstitutionIdempotent(t *testing.T) {
 
 	repo := people.NewRepository(db)
 	service := people.NewService(repo, db, nil, nil)
-	client := people.NewAPIIndonesiaClient(mockServer.URL, "aip_live_test_key")
+	client := apiindonesia.NewClient(mockServer.URL, "aip_live_test_key")
 	service.SetExternalDependencies(client, nil)
 	ctx := context.Background()
 

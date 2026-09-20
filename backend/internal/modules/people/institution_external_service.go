@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"dcisp/backend/internal/integrations/apiindonesia"
 	"dcisp/backend/internal/modules/system"
 	"github.com/google/uuid"
 )
@@ -35,8 +36,8 @@ func importAuditEntry(draft *Institution) system.MutationAuditEntry {
 
 // Hasil pencarian gabungan institusi eksternal (kampus + sekolah).
 type ExternalInstitutionSearchResult struct {
-	Kampus  *SearchKampusResult  `json:"kampus,omitempty"`
-	Sekolah *SearchSekolahResult `json:"sekolah,omitempty"`
+	Kampus  *apiindonesia.SearchKampusResult  `json:"kampus,omitempty"`
+	Sekolah *apiindonesia.SearchSekolahResult `json:"sekolah,omitempty"`
 }
 
 // Permintaan impor institusi eksternal ke database internal.
@@ -74,7 +75,7 @@ func (s *Service) SearchExternalInstitutions(ctx context.Context, query, source,
 	normalizedSource := strings.ToUpper(strings.TrimSpace(source))
 
 	if normalizedSource == "" || normalizedSource == "KAMPUS" || normalizedSource == "API_KAMPUS" || normalizedSource == "ALL" {
-		kampusRes, err := s.externalClient.SearchKampus(ctx, SearchKampusParams{
+		kampusRes, err := s.externalClient.SearchKampus(ctx, apiindonesia.SearchKampusParams{
 			Query:    query,
 			Province: province,
 			Regency:  regency,
@@ -88,7 +89,7 @@ func (s *Service) SearchExternalInstitutions(ctx context.Context, query, source,
 	}
 
 	if normalizedSource == "" || normalizedSource == "SEKOLAH" || normalizedSource == "API_SEKOLAH" || normalizedSource == "ALL" {
-		sekolahRes, err := s.externalClient.SearchSekolah(ctx, SearchSekolahParams{
+		sekolahRes, err := s.externalClient.SearchSekolah(ctx, apiindonesia.SearchSekolahParams{
 			Query:    query,
 			Province: province,
 			Regency:  regency,

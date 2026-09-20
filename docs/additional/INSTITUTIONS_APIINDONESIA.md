@@ -35,17 +35,18 @@
 ```text
 API Indonesia (kampus/sekolah)
       ↓  x-api-key, timeout 10s
-APIIndonesiaClient (external DTO, error mapping aman)
-      ↓
-Service (cache Redis 30 mnt, mapper, idempotensi)
+internal/integrations/apiindonesia.Client (external DTO, error mapping aman)
+      ↓  terdaftar via integrations.Registry ("api-indonesia")
+People Service (cache Redis 30 mnt, mapper, idempotensi)
       ↓
 Internal Institution Domain (PostgreSQL institutions)
       ↓
 Application (interns.institution_id FK RESTRICT)
 ```
 
-- **External DTO** (`APIIndonesiaKampus`, `APIIndonesiaSekolah`) terpisah dari model internal.
-- **Mapper** (`MapKampusToInstitutionDraft`, `MapSekolahToInstitutionDraft`) mengonversi ke draf internal.
+- **Modul mandiri** `internal/integrations/`: `Registry` generik (`Register`/`Get`/`Names` via interface `Provider`) + paket provider `apiindonesia` (client + DTO `Kampus`/`Sekolah`/`Meta`). Provider API lain cukup mengimplementasikan `Name() string` lalu didaftarkan di `cmd/api/main.go` — tanpa mengubah modul domain.
+- **External DTO** (`apiindonesia.Kampus`, `apiindonesia.Sekolah`) terpisah dari model internal.
+- **Mapper** di modul people (`MapKampusToInstitutionDraft`, `MapSekolahToInstitutionDraft` pada `institution_external_mapper.go`) mengonversi ke draf internal.
 - Business logic tetap di service layer; client hanya request/auth/timeout/parse/pagination.
 
 ## 4. Identifier Mapping & Database
