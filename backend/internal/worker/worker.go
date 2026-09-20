@@ -25,10 +25,15 @@ type WorkerPool struct {
 
 // Menginisialisasi infrastruktur antrean latar belakang Asynq yang terhubung ke Redis.
 func NewWorkerPool(cfg *config.Config) *WorkerPool {
+	return NewWorkerPoolWithDB(cfg, 0)
+}
+
+// Menginisialisasi infrastruktur antrean latar belakang Asynq dengan nomor basis data Redis tertentu.
+func NewWorkerPoolWithDB(cfg *config.Config, dbNum int) *WorkerPool {
 	redisOpt := asynq.RedisClientOpt{
 		Addr:     fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
 		Password: cfg.RedisPassword,
-		DB:       0,
+		DB:       dbNum,
 	}
 
 	client := asynq.NewClient(redisOpt)

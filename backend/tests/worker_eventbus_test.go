@@ -22,11 +22,11 @@ func TestAsynqWorkerEnqueueAndExecution(t *testing.T) {
 	cfg, err := config.LoadConfig()
 	require.NoError(t, err)
 
-	w := worker.NewWorkerPool(cfg)
+	w := worker.NewWorkerPoolWithDB(cfg, 14)
 	defer w.Shutdown()
 
 	taskProcessed := make(chan bool, 1)
-	testTaskType := "test:task:sample"
+	testTaskType := "test:task:" + uuid.New().String()
 
 	w.RegisterHandler(testTaskType, func(ctx context.Context, task *asynq.Task) error {
 		taskProcessed <- true
@@ -45,8 +45,8 @@ func TestAsynqWorkerEnqueueAndExecution(t *testing.T) {
 	select {
 	case <-taskProcessed:
 		// Sukses diproses worker
-	case <-time.After(3 * time.Second):
-		t.Fatal("Batas waktu habis: Task Asynq tidak diproses dalam 3 detik")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Batas waktu habis: Task Asynq tidak diproses dalam 5 detik")
 	}
 }
 

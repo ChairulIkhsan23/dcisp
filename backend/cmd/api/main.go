@@ -58,10 +58,10 @@ func main() {
 
 	// 4. Initialize Background Worker & Event Bus
 	workerPool := worker.NewWorkerPool(cfg)
+	eventBus := eventbus.NewEventBus(workerPool)
 	if err := workerPool.Start(); err != nil {
 		log.Printf("Peringatan: Gagal menjalankan Asynq worker server: %v", err)
 	}
-	eventBus := eventbus.NewEventBus(workerPool)
 
 	// 5. Initialize Modular Services & Controllers
 	identityRepo := identity.NewRepository(db)

@@ -181,11 +181,10 @@ func TestSingleDispatchNoDoubleProcessing(t *testing.T) {
 	cfg, err := config.LoadConfig()
 	require.NoError(t, err)
 
-	pool := worker.NewWorkerPool(cfg)
+	pool := worker.NewWorkerPoolWithDB(cfg, 13)
+	bus := eventbus.NewEventBus(pool)
 	require.NoError(t, pool.Start())
 	defer pool.Shutdown()
-
-	bus := eventbus.NewEventBus(pool)
 
 	var counter int64
 	bus.Subscribe("audit.probe_single", func(ctx context.Context, event eventbus.DomainEvent) error {
