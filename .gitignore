@@ -9,6 +9,8 @@ docs/guide/*
 !docs/guide/CODING-STANDARDS.md
 !docs/guide/API.md
 !docs/guide/DATABASE.md
+!docs/reports/
+!docs/reports/**
 
 # Environment variables
 .env
