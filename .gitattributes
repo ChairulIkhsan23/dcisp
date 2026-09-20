@@ -1,0 +1,8 @@
+# Normalisasi akhir baris agar `gofmt -l .` deterministik di semua platform (FMT-01).
+*.go text eol=lf
+*.sql text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.gitignore text eol=lf
