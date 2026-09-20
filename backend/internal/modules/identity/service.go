@@ -26,11 +26,11 @@ func NewService(repo *Repository, cfg *config.Config) *Service {
 	return &Service{repo: repo, cfg: cfg}
 }
 
-// Memverifikasi kredensial login pengguna dan menghasilkan token akses JWT serta token refresh.
+// Memverifikasi kredensial login pengguna aktif dan menghasilkan pasangan token akses serta token refresh.
 func (s *Service) Login(ctx context.Context, email, password string) (*utils.TokenPair, *UserProfileResponse, error) {
 	user, err := s.repo.FindByEmail(ctx, email)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("gagal mencari data pengguna: %w", err)
 	}
 	if user == nil {
 		return nil, nil, ErrInvalidCredentials
@@ -41,9 +41,17 @@ func (s *Service) Login(ctx context.Context, email, password string) (*utils.Tok
 		return nil, nil, ErrInvalidCredentials
 	}
 
-	role, scopes, err := s.repo.GetUserRoleAndScopes(ctx, user.ID)
+	if user.Status != "ACTIVE" {
+		return nil, nil, ErrAccountInactive
+	}
+
+	roles, scopes, err := s.repo.GetUserRolesAndScopes(ctx, user.ID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("gagal mengambil peran pengguna: %w", err)
+	}
+	primaryRole := "GUEST"
+	if len(roles) > 0 {
+		primaryRole = roles[0]
 	}
 
 	permissions, err := s.repo.GetUserPermissions(ctx, user.ID)
@@ -57,7 +65,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*utils.Tok
 		s.cfg.JWTRefreshDurationDays,
 		user.ID,
 		user.Email,
-		role,
+		primaryRole,
 		scopes,
 	)
 	if err != nil {
@@ -69,7 +77,8 @@ func (s *Service) Login(ctx context.Context, email, password string) (*utils.Tok
 		Email:       user.Email,
 		FullName:    user.FullName,
 		Status:      user.Status,
-		Role:        role,
+		Role:        primaryRole,
+		Roles:       roles,
 		Scopes:      scopes,
 		Permissions: permissions,
 	}
@@ -77,19 +86,26 @@ func (s *Service) Login(ctx context.Context, email, password string) (*utils.Tok
 	return tokens, profile, nil
 }
 
-// Mengambil informasi profil lengkap, role, scope, dan permission pengguna.
+// Mengambil informasi profil lengkap, seluruh peran, cakupan scope, dan izin aktif pengguna.
 func (s *Service) GetUserProfile(ctx context.Context, userID uuid.UUID) (*UserProfileResponse, error) {
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gagal mencari data pengguna berdasarkan id: %w", err)
 	}
 	if user == nil {
 		return nil, ErrUserNotFound
 	}
+	if user.Status != "ACTIVE" {
+		return nil, ErrAccountInactive
+	}
 
-	role, scopes, err := s.repo.GetUserRoleAndScopes(ctx, user.ID)
+	roles, scopes, err := s.repo.GetUserRolesAndScopes(ctx, user.ID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gagal mengambil peran pengguna: %w", err)
+	}
+	primaryRole := "GUEST"
+	if len(roles) > 0 {
+		primaryRole = roles[0]
 	}
 
 	permissions, err := s.repo.GetUserPermissions(ctx, user.ID)
@@ -102,27 +118,35 @@ func (s *Service) GetUserProfile(ctx context.Context, userID uuid.UUID) (*UserPr
 		Email:       user.Email,
 		FullName:    user.FullName,
 		Status:      user.Status,
-		Role:        role,
+		Role:        primaryRole,
+		Roles:       roles,
 		Scopes:      scopes,
 		Permissions: permissions,
 	}, nil
 }
 
-// Menghasilkan pasangan token baru menggunakan token refresh yang valid.
+// Menghasilkan pasangan token baru menggunakan token refresh yang valid dari pengguna berstatus aktif.
 func (s *Service) RefreshToken(ctx context.Context, refreshTokenString string) (*utils.TokenPair, error) {
-	claims, err := utils.ValidateToken(s.cfg.JWTSecret, refreshTokenString)
+	claims, err := utils.ValidateToken(s.cfg.JWTSecret, refreshTokenString, utils.TokenTypeRefresh)
 	if err != nil {
-		return nil, errors.New("refresh token tidak valid atau telah kedaluwarsa")
+		return nil, fmt.Errorf("refresh token tidak valid atau telah kedaluwarsa: %w", err)
 	}
 
 	user, err := s.repo.FindByID(ctx, claims.UserID)
-	if err != nil || user == nil {
+	if err != nil {
+		return nil, fmt.Errorf("gagal mencari data pengguna saat pembaruan token: %w", err)
+	}
+	if user == nil || user.Status != "ACTIVE" {
 		return nil, errors.New("pengguna tidak ditemukan atau tidak aktif")
 	}
 
-	role, scopes, err := s.repo.GetUserRoleAndScopes(ctx, user.ID)
+	roles, scopes, err := s.repo.GetUserRolesAndScopes(ctx, user.ID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gagal mengambil peran pengguna saat pembaruan token: %w", err)
+	}
+	primaryRole := "GUEST"
+	if len(roles) > 0 {
+		primaryRole = roles[0]
 	}
 
 	return utils.GenerateTokenPair(
@@ -131,12 +155,16 @@ func (s *Service) RefreshToken(ctx context.Context, refreshTokenString string) (
 		s.cfg.JWTRefreshDurationDays,
 		user.ID,
 		user.Email,
-		role,
+		primaryRole,
 		scopes,
 	)
 }
 
-// Mengambil seluruh daftar role master dari repository.
+// Mengambil seluruh daftar master role sistem dari repository.
 func (s *Service) GetRoles(ctx context.Context) ([]Role, error) {
-	return s.repo.GetAllRoles(ctx)
+	roles, err := s.repo.GetAllRoles(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil daftar peran: %w", err)
+	}
+	return roles, nil
 }

@@ -2,6 +2,7 @@ package identity
 
 import (
 	"errors"
+	"log"
 	"net/http"
 
 	"dcisp/backend/internal/middleware"
@@ -33,7 +34,12 @@ func (ctrl *Controller) Login(c *gin.Context) {
 			response.Unauthorized(c, "Email atau kata sandi tidak valid")
 			return
 		}
-		response.InternalError(c, "Gagal mengautentikasi pengguna", err.Error())
+		if errors.Is(err, ErrAccountInactive) {
+			response.Unauthorized(c, "Akun tidak aktif, silakan hubungi administrator")
+			return
+		}
+		log.Printf("Kesalahan internal saat login: %v", err)
+		response.InternalError(c, "Terjadi kesalahan pada server saat autentikasi")
 		return
 	}
 
@@ -53,7 +59,7 @@ func (ctrl *Controller) RefreshToken(c *gin.Context) {
 
 	tokens, err := ctrl.service.RefreshToken(c.Request.Context(), req.RefreshToken)
 	if err != nil {
-		response.Unauthorized(c, err.Error())
+		response.Unauthorized(c, "Refresh token tidak valid atau telah kedaluwarsa")
 		return
 	}
 
@@ -70,14 +76,34 @@ func (ctrl *Controller) GetMe(c *gin.Context) {
 		return
 	}
 
-	userID := userIDVal.(uuid.UUID)
+	var userID uuid.UUID
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		userID = v
+	case string:
+		parsed, err := uuid.Parse(v)
+		if err != nil {
+			response.Unauthorized(c, "Konteks identitas pengguna tidak valid")
+			return
+		}
+		userID = parsed
+	default:
+		response.Unauthorized(c, "Konteks identitas pengguna tidak valid")
+		return
+	}
+
 	profile, err := ctrl.service.GetUserProfile(c.Request.Context(), userID)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			response.NotFound(c, "Profil pengguna tidak ditemukan")
 			return
 		}
-		response.InternalError(c, "Gagal mengambil profil pengguna", err.Error())
+		if errors.Is(err, ErrAccountInactive) {
+			response.Unauthorized(c, "Akun pengguna tidak aktif")
+			return
+		}
+		log.Printf("Kesalahan internal saat mengambil profil: %v", err)
+		response.InternalError(c, "Terjadi kesalahan pada server saat mengambil profil")
 		return
 	}
 
@@ -88,7 +114,8 @@ func (ctrl *Controller) GetMe(c *gin.Context) {
 func (ctrl *Controller) GetRoles(c *gin.Context) {
 	roles, err := ctrl.service.GetRoles(c.Request.Context())
 	if err != nil {
-		response.InternalError(c, "Gagal mengambil daftar peran sistem", err.Error())
+		log.Printf("Kesalahan internal saat mengambil daftar peran: %v", err)
+		response.InternalError(c, "Terjadi kesalahan pada server saat mengambil daftar peran")
 		return
 	}
 

@@ -62,7 +62,17 @@ func NotFound(c *gin.Context, message string) {
 	Error(c, http.StatusNotFound, message)
 }
 
-// Mengirimkan respons error HTTP 500 Internal Server Error.
-func InternalError(c *gin.Context, message string, errors ...interface{}) {
-	Error(c, http.StatusInternalServerError, message, errors...)
+// Mengirimkan respons error HTTP 409 Conflict.
+func Conflict(c *gin.Context, message string, errors ...interface{}) {
+	Error(c, http.StatusConflict, message, errors...)
+}
+
+// Mengirimkan respons error HTTP 429 Too Many Requests.
+func TooManyRequests(c *gin.Context, message string, errors ...interface{}) {
+	Error(c, http.StatusTooManyRequests, message, errors...)
+}
+
+// Mengirimkan respons error HTTP 500 Internal Server Error tanpa membocorkan detail teknis internal.
+func InternalError(c *gin.Context, message string) {
+	Error(c, http.StatusInternalServerError, message)
 }

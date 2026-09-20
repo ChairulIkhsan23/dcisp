@@ -19,12 +19,12 @@ func NewRepository(db *database.PostgresDB) *Repository {
 	return &Repository{db: db}
 }
 
-// Mengambil data pengguna aktif dari database berdasarkan alamat email.
+// Mengambil data pengguna dari database berdasarkan alamat email terdaftar.
 func (r *Repository) FindByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
 		SELECT id, email, password_hash, full_name, avatar_file_id, status, created_at, updated_at
 		FROM users
-		WHERE email = $1 AND status = 'ACTIVE'
+		WHERE email = $1
 	`
 	row := r.db.Pool.QueryRow(ctx, query, email)
 
@@ -61,29 +61,62 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*User, error) 
 	return &u, nil
 }
 
-// Mengambil nama role aktif dan cakupan scope yang dimiliki oleh pengguna.
-func (r *Repository) GetUserRoleAndScopes(ctx context.Context, userID uuid.UUID) (string, []string, error) {
+// Mengambil seluruh daftar peran dan cakupan scope yang dimiliki oleh pengguna.
+func (r *Repository) GetUserRolesAndScopes(ctx context.Context, userID uuid.UUID) ([]string, []string, error) {
 	query := `
-		SELECT r.name, COALESCE(s.scope_type, 'OWN_DATA')
+		SELECT DISTINCT r.name, COALESCE(s.scope_type, 'OWN_DATA')
 		FROM user_roles ur
 		JOIN roles r ON r.id = ur.role_id
 		LEFT JOIN scopes s ON s.id = ur.scope_id
 		WHERE ur.user_id = $1
-		LIMIT 1
 	`
-	var roleName, scopeType string
-	err := r.db.Pool.QueryRow(ctx, query, userID).Scan(&roleName, &scopeType)
+	rows, err := r.db.Pool.Query(ctx, query, userID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "GUEST", []string{"OWN_DATA"}, nil
+		return nil, nil, fmt.Errorf("gagal mengueri peran dan scope pengguna: %w", err)
+	}
+	defer rows.Close()
+
+	roleMap := make(map[string]bool)
+	scopeMap := make(map[string]bool)
+	var roles []string
+	var scopes []string
+
+	for rows.Next() {
+		var roleName, scopeType string
+		if err := rows.Scan(&roleName, &scopeType); err != nil {
+			return nil, nil, fmt.Errorf("gagal memindai data peran dan scope: %w", err)
 		}
-		return "", nil, fmt.Errorf("gagal mengueri peran pengguna: %w", err)
+		if !roleMap[roleName] {
+			roleMap[roleName] = true
+			roles = append(roles, roleName)
+		}
+		if !scopeMap[scopeType] {
+			scopeMap[scopeType] = true
+			scopes = append(scopes, scopeType)
+		}
 	}
 
-	return roleName, []string{scopeType}, nil
+	if len(roles) == 0 {
+		return []string{"GUEST"}, []string{"OWN_DATA"}, nil
+	}
+
+	return roles, scopes, nil
 }
 
-// Mengambil daftar izin akses spesifik yang dimiliki oleh pengguna.
+// Mengambil nama role utama dan cakupan seluruh scope yang dimiliki oleh pengguna untuk kompatibilitas.
+func (r *Repository) GetUserRoleAndScopes(ctx context.Context, userID uuid.UUID) (string, []string, error) {
+	roles, scopes, err := r.GetUserRolesAndScopes(ctx, userID)
+	if err != nil {
+		return "", nil, err
+	}
+	primaryRole := "GUEST"
+	if len(roles) > 0 {
+		primaryRole = roles[0]
+	}
+	return primaryRole, scopes, nil
+}
+
+// Mengambil daftar izin akses spesifik yang dimiliki oleh pengguna dari seluruh perannya.
 func (r *Repository) GetUserPermissions(ctx context.Context, userID uuid.UUID) ([]string, error) {
 	query := `
 		SELECT DISTINCT CONCAT(p.resource, ':', p.action)

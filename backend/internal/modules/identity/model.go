@@ -7,28 +7,28 @@ import (
 )
 
 type User struct {
-	ID           uuid.UUID  `json:"id"`
-	Email        string     `json:"email"`
-	PasswordHash string     `json:"-"`
-	FullName     string     `json:"full_name"`
-	AvatarFileID *uuid.UUID `json:"avatar_file_id,omitempty"`
-	Status       string     `json:"status"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID           uuid.UUID  `json:"id" db:"id"`
+	Email        string     `json:"email" db:"email"`
+	PasswordHash string     `json:"-" db:"password_hash"`
+	FullName     string     `json:"full_name" db:"full_name"`
+	AvatarFileID *uuid.UUID `json:"avatar_file_id,omitempty" db:"avatar_file_id"`
+	Status       string     `json:"status" db:"status"`
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 type Role struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	IsSystem    bool      `json:"is_system"`
+	ID          uuid.UUID `json:"id" db:"id"`
+	Name        string    `json:"name" db:"name"`
+	Description string    `json:"description" db:"description"`
+	IsSystem    bool      `json:"is_system" db:"is_system"`
 }
 
 type Scope struct {
-	ID        uuid.UUID  `json:"id"`
-	Name      string     `json:"name"`
-	ScopeType string     `json:"scope_type"`
-	ContextID *uuid.UUID `json:"context_id,omitempty"`
+	ID        uuid.UUID  `json:"id" db:"id"`
+	Name      string     `json:"name" db:"name"`
+	ScopeType string     `json:"scope_type" db:"scope_type"`
+	ContextID *uuid.UUID `json:"context_id,omitempty" db:"context_id"`
 }
 
 type UserProfileResponse struct {
@@ -37,6 +37,7 @@ type UserProfileResponse struct {
 	FullName    string    `json:"full_name"`
 	Status      string    `json:"status"`
 	Role        string    `json:"role"`
+	Roles       []string  `json:"roles,omitempty"`
 	Scopes      []string  `json:"scopes"`
 	Permissions []string  `json:"permissions"`
 }

@@ -9,11 +9,18 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	TokenTypeAccess  = "access"
+	TokenTypeRefresh = "refresh"
+)
+
 type JWTClaims struct {
-	UserID uuid.UUID `json:"user_id"`
-	Email  string    `json:"email"`
-	Role   string    `json:"role"`
-	Scopes []string  `json:"scopes"`
+	UserID    uuid.UUID `json:"user_id"`
+	Email     string    `json:"email"`
+	Role      string    `json:"role"`
+	Roles     []string  `json:"roles,omitempty"`
+	Scopes    []string  `json:"scopes"`
+	TokenType string    `json:"type"`
 	jwt.RegisteredClaims
 }
 
@@ -24,7 +31,7 @@ type TokenPair struct {
 	TokenType    string `json:"token_type"`
 }
 
-// Menghasilkan pasangan token akses JWT berdurasi 15 menit dan token refresh berdurasi 7 hari.
+// Menghasilkan pasangan token akses JWT berdurasi 15 menit dan token refresh berdurasi 7 hari dengan pemisahan tipe yang ketat.
 func GenerateTokenPair(secret string, accessMinutes, refreshDays int, userID uuid.UUID, email, role string, scopes []string) (*TokenPair, error) {
 	now := time.Now()
 	accessExpiry := now.Add(time.Duration(accessMinutes) * time.Minute)
@@ -32,10 +39,11 @@ func GenerateTokenPair(secret string, accessMinutes, refreshDays int, userID uui
 
 	// 1. Access Token
 	accessClaims := &JWTClaims{
-		UserID: userID,
-		Email:  email,
-		Role:   role,
-		Scopes: scopes,
+		UserID:    userID,
+		Email:     email,
+		Role:      role,
+		Scopes:    scopes,
+		TokenType: TokenTypeAccess,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(accessExpiry),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -52,11 +60,19 @@ func GenerateTokenPair(secret string, accessMinutes, refreshDays int, userID uui
 	}
 
 	// 2. Refresh Token
-	refreshClaims := &jwt.RegisteredClaims{
-		ExpiresAt: jwt.NewNumericDate(refreshExpiry),
-		IssuedAt:  jwt.NewNumericDate(now),
-		Subject:   userID.String(),
-		Issuer:    "dcisp-auth-service",
+	refreshClaims := &JWTClaims{
+		UserID:    userID,
+		Email:     email,
+		Role:      role,
+		Scopes:    scopes,
+		TokenType: TokenTypeRefresh,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(refreshExpiry),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+			Subject:   userID.String(),
+			Issuer:    "dcisp-auth-service",
+		},
 	}
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
@@ -73,8 +89,8 @@ func GenerateTokenPair(secret string, accessMinutes, refreshDays int, userID uui
 	}, nil
 }
 
-// Memvalidasi keabsahan token JWT dan mengekstrak data klaim identitas pengguna.
-func ValidateToken(secret, tokenString string) (*JWTClaims, error) {
+// Memvalidasi keabsahan token JWT dan memastikan tipe token sesuai dengan yang diharapkan (access atau refresh).
+func ValidateToken(secret, tokenString, expectedType string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("metode penandatanganan tidak diharapkan: %v", token.Header["alg"])
@@ -95,6 +111,15 @@ func ValidateToken(secret, tokenString string) (*JWTClaims, error) {
 		if claims.UserID == uuid.Nil {
 			return nil, errors.New("payload token tidak valid: user_id tidak ditemukan")
 		}
+
+		if claims.TokenType == "" {
+			return nil, errors.New("payload token tidak valid: tipe token tidak ditemukan")
+		}
+
+		if expectedType != "" && claims.TokenType != expectedType {
+			return nil, fmt.Errorf("tipe token tidak valid, diharapkan '%s' tetapi ditemukan '%s'", expectedType, claims.TokenType)
+		}
+
 		return claims, nil
 	}
 

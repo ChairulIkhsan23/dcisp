@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -21,24 +20,27 @@ import (
 // Menginisialisasi konfigurasi, koneksi database, routing middleware, dan menjalankan server HTTP Go backend.
 func main() {
 	log.Println("==========================================================")
-	log.Println("🚀 Starting DCISP Platform v1.0 — Golang Backend Server")
+	log.Println("Starting DCISP Platform v1.0 — Golang Backend Server")
 	log.Println("==========================================================")
 
-	// 1. Load Configurations
-	cfg := config.LoadConfig()
+	// 1. Load Configurations (Fail-hard if essential configs missing)
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatalf("Fatal: Kesalahan konfigurasi aplikasi: %v", err)
+	}
 	gin.SetMode(cfg.GinMode)
 
 	// 2. Initialize PostgreSQL Pool
 	db, err := database.NewPostgresDB(cfg)
 	if err != nil {
-		log.Fatalf("Fatal: PostgreSQL connection failed: %v", err)
+		log.Fatalf("Fatal: Koneksi PostgreSQL gagal: %v", err)
 	}
 	defer db.Close()
 
 	// 3. Initialize Redis Client
 	rdb, err := database.NewRedisClient(cfg)
 	if err != nil {
-		log.Fatalf("Fatal: Redis connection failed: %v", err)
+		log.Fatalf("Fatal: Koneksi Redis gagal: %v", err)
 	}
 	defer rdb.Close()
 
@@ -82,21 +84,25 @@ func main() {
 
 		dbStatus := "UP"
 		if err := db.Pool.Ping(ctx); err != nil {
-			dbStatus = fmt.Sprintf("DOWN: %v", err)
+			log.Printf("Readiness probe gagal memeriksa koneksi database: %v", err)
+			dbStatus = "DOWN"
 		}
 
 		redisStatus := "UP"
 		if err := rdb.Client.Ping(ctx).Err(); err != nil {
-			redisStatus = fmt.Sprintf("DOWN: %v", err)
+			log.Printf("Readiness probe gagal memeriksa koneksi redis: %v", err)
+			redisStatus = "DOWN"
 		}
 
 		status := http.StatusOK
+		overallStatus := "UP"
 		if dbStatus != "UP" || redisStatus != "UP" {
 			status = http.StatusServiceUnavailable
+			overallStatus = "DOWN"
 		}
 
 		c.JSON(status, gin.H{
-			"status":    "UP",
+			"status":    overallStatus,
 			"database":  dbStatus,
 			"redis":     redisStatus,
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
@@ -124,7 +130,7 @@ func main() {
 			protected.Use(middleware.AuthJWT(cfg))
 			{
 				protected.GET("/me", identityCtrl.GetMe)
-				protected.GET("/roles", middleware.RequirePermission(db, "system.roles", "view", "SYSTEM"), identityCtrl.GetRoles)
+				protected.GET("/roles", middleware.RequirePermission(db, rdb, "system.roles", "view", "SYSTEM"), identityCtrl.GetRoles)
 			}
 		}
 	}
@@ -157,6 +163,9 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
+
+	// Ensure all asynchronous audit log events are flushed to database
+	middleware.CloseAuditWorker()
 
 	log.Println("Server exiting successfully")
 }

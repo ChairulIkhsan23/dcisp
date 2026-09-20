@@ -13,10 +13,11 @@ const (
 	ContextUserIDKey = "user_id"
 	ContextEmailKey  = "email"
 	ContextRoleKey   = "role"
+	ContextRolesKey  = "roles"
 	ContextScopesKey = "scopes"
 )
 
-// Memvalidasi token JWT Bearer pada header request dan menyematkan data identitas pengguna ke dalam request context.
+// Memvalidasi token JWT Bearer bertipe access pada header request dan menyematkan data identitas pengguna ke dalam request context.
 func AuthJWT(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -33,7 +34,7 @@ func AuthJWT(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := utils.ValidateToken(cfg.JWTSecret, parts[1])
+		claims, err := utils.ValidateToken(cfg.JWTSecret, parts[1], utils.TokenTypeAccess)
 		if err != nil {
 			response.Unauthorized(c, "Token akses tidak valid atau telah kedaluwarsa")
 			c.Abort()
@@ -44,6 +45,7 @@ func AuthJWT(cfg *config.Config) gin.HandlerFunc {
 		c.Set(ContextUserIDKey, claims.UserID)
 		c.Set(ContextEmailKey, claims.Email)
 		c.Set(ContextRoleKey, claims.Role)
+		c.Set(ContextRolesKey, claims.Roles)
 		c.Set(ContextScopesKey, claims.Scopes)
 
 		c.Next()
