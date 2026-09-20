@@ -13,10 +13,12 @@ import (
 )
 
 type Service struct {
-	repo         *Repository
-	db           *database.PostgresDB
-	auditService *system.AuditService
-	eventBus     *eventbus.EventBus
+	repo           *Repository
+	db             *database.PostgresDB
+	auditService   *system.AuditService
+	eventBus       *eventbus.EventBus
+	externalClient *APIIndonesiaClient
+	redisClient    *database.RedisClient
 }
 
 // Menginisialisasi instance baru service people and lifecycle management.
@@ -27,6 +29,12 @@ func NewService(repo *Repository, db *database.PostgresDB, audit *system.AuditSe
 		auditService: audit,
 		eventBus:     bus,
 	}
+}
+
+// Menetapkan klien eksternal API Indonesia dan Redis cache untuk pencarian institusi.
+func (s *Service) SetExternalDependencies(client *APIIndonesiaClient, rdb *database.RedisClient) {
+	s.externalClient = client
+	s.redisClient = rdb
 }
 
 // ============================================================================

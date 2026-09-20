@@ -28,6 +28,8 @@ type Config struct {
 	R2SecretAccessKey        string
 	R2BucketName             string
 	R2PublicURL              string
+	APIIndonesiaBaseURL      string
+	APIIndonesiaKey          string
 }
 
 // Memuat seluruh konfigurasi aplikasi dari environment variable dan memvalidasi konfigurasi wajib.
@@ -61,6 +63,8 @@ func LoadConfig() (*Config, error) {
 		R2SecretAccessKey:        getEnv("R2_SECRET_ACCESS_KEY", "local_dev_secret"),
 		R2BucketName:             getEnv("R2_BUCKET_NAME", "dcisp-vault"),
 		R2PublicURL:              getEnv("R2_PUBLIC_URL", "https://pub-r2.dcisp.internal"),
+		APIIndonesiaBaseURL:      getEnv("API_INDONESIA_BASE_URL", "https://use.apiindonesia.id"),
+		APIIndonesiaKey:          getEnv("API_INDONESIA_KEY", ""),
 	}, nil
 }
 

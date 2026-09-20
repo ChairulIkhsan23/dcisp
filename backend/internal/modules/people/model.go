@@ -26,14 +26,17 @@ const (
 )
 
 type Institution struct {
-	ID            uuid.UUID `json:"id" db:"id"`
-	Name          string    `json:"name" db:"name"`
-	Address       *string   `json:"address,omitempty" db:"address"`
-	ContactPerson *string   `json:"contact_person,omitempty" db:"contact_person"`
-	Email         *string   `json:"email,omitempty" db:"email"`
-	Phone         *string   `json:"phone,omitempty" db:"phone"`
-	CreatedAt     time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
+	ID            uuid.UUID  `json:"id" db:"id"`
+	Name          string     `json:"name" db:"name"`
+	Address       *string    `json:"address,omitempty" db:"address"`
+	ContactPerson *string    `json:"contact_person,omitempty" db:"contact_person"`
+	Email         *string    `json:"email,omitempty" db:"email"`
+	Phone         *string    `json:"phone,omitempty" db:"phone"`
+	ExternalID    *string    `json:"external_id,omitempty" db:"external_id"`
+	Source        *string    `json:"source,omitempty" db:"source"`
+	SyncedAt      *time.Time `json:"synced_at,omitempty" db:"synced_at"`
+	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 type Batch struct {

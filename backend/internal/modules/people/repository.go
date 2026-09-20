@@ -26,13 +26,16 @@ func NewRepository(db *database.PostgresDB) *Repository {
 // Menyimpan entitas institusi pendidikan mitra baru ke dalam database.
 func (r *Repository) CreateInstitution(ctx context.Context, inst *Institution) error {
 	query := `
-		INSERT INTO institutions (id, name, address, contact_person, email, phone, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		INSERT INTO institutions (id, name, address, contact_person, email, phone, external_id, source, synced_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 	`
 	if inst.ID == uuid.Nil {
 		inst.ID = uuid.New()
 	}
-	_, err := r.db.Pool.Exec(ctx, query, inst.ID, inst.Name, inst.Address, inst.ContactPerson, inst.Email, inst.Phone)
+	if inst.Source == nil {
+		inst.Source = strPtr(InstitutionSourceManual)
+	}
+	_, err := r.db.Pool.Exec(ctx, query, inst.ID, inst.Name, inst.Address, inst.ContactPerson, inst.Email, inst.Phone, inst.ExternalID, inst.Source, inst.SyncedAt)
 	if err != nil {
 		return fmt.Errorf("gagal menyimpan data institusi: %w", err)
 	}
@@ -42,12 +45,12 @@ func (r *Repository) CreateInstitution(ctx context.Context, inst *Institution) e
 // Mengambil data institusi pendidikan berdasarkan identitas unik UUID.
 func (r *Repository) GetInstitutionByID(ctx context.Context, id uuid.UUID) (*Institution, error) {
 	query := `
-		SELECT id, name, address, contact_person, email, phone, created_at, updated_at
+		SELECT id, name, address, contact_person, email, phone, external_id, source, synced_at, created_at, updated_at
 		FROM institutions
 		WHERE id = $1
 	`
 	var inst Institution
-	err := r.db.Pool.QueryRow(ctx, query, id).Scan(&inst.ID, &inst.Name, &inst.Address, &inst.ContactPerson, &inst.Email, &inst.Phone, &inst.CreatedAt, &inst.UpdatedAt)
+	err := r.db.Pool.QueryRow(ctx, query, id).Scan(&inst.ID, &inst.Name, &inst.Address, &inst.ContactPerson, &inst.Email, &inst.Phone, &inst.ExternalID, &inst.Source, &inst.SyncedAt, &inst.CreatedAt, &inst.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -57,10 +60,28 @@ func (r *Repository) GetInstitutionByID(ctx context.Context, id uuid.UUID) (*Ins
 	return &inst, nil
 }
 
+// Mengambil data institusi berdasarkan pengenal eksternal API Indonesia untuk mencegah duplikasi sinkronisasi.
+func (r *Repository) GetInstitutionByExternalID(ctx context.Context, externalID string) (*Institution, error) {
+	query := `
+		SELECT id, name, address, contact_person, email, phone, external_id, source, synced_at, created_at, updated_at
+		FROM institutions
+		WHERE external_id = $1
+	`
+	var inst Institution
+	err := r.db.Pool.QueryRow(ctx, query, externalID).Scan(&inst.ID, &inst.Name, &inst.Address, &inst.ContactPerson, &inst.Email, &inst.Phone, &inst.ExternalID, &inst.Source, &inst.SyncedAt, &inst.CreatedAt, &inst.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("gagal mencari institusi berdasarkan external_id: %w", err)
+	}
+	return &inst, nil
+}
+
 // Mengambil seluruh daftar institusi pendidikan mitra dari database.
 func (r *Repository) ListInstitutions(ctx context.Context) ([]Institution, error) {
 	query := `
-		SELECT id, name, address, contact_person, email, phone, created_at, updated_at
+		SELECT id, name, address, contact_person, email, phone, external_id, source, synced_at, created_at, updated_at
 		FROM institutions
 		ORDER BY name ASC
 	`
@@ -73,7 +94,7 @@ func (r *Repository) ListInstitutions(ctx context.Context) ([]Institution, error
 	var list []Institution
 	for rows.Next() {
 		var inst Institution
-		if err := rows.Scan(&inst.ID, &inst.Name, &inst.Address, &inst.ContactPerson, &inst.Email, &inst.Phone, &inst.CreatedAt, &inst.UpdatedAt); err == nil {
+		if err := rows.Scan(&inst.ID, &inst.Name, &inst.Address, &inst.ContactPerson, &inst.Email, &inst.Phone, &inst.ExternalID, &inst.Source, &inst.SyncedAt, &inst.CreatedAt, &inst.UpdatedAt); err == nil {
 			list = append(list, inst)
 		}
 	}
@@ -84,10 +105,10 @@ func (r *Repository) ListInstitutions(ctx context.Context) ([]Institution, error
 func (r *Repository) UpdateInstitution(ctx context.Context, inst *Institution) error {
 	query := `
 		UPDATE institutions
-		SET name = $2, address = $3, contact_person = $4, email = $5, phone = $6, updated_at = CURRENT_TIMESTAMP
+		SET name = $2, address = $3, contact_person = $4, email = $5, phone = $6, external_id = $7, source = $8, synced_at = $9, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1
 	`
-	cmdTag, err := r.db.Pool.Exec(ctx, query, inst.ID, inst.Name, inst.Address, inst.ContactPerson, inst.Email, inst.Phone)
+	cmdTag, err := r.db.Pool.Exec(ctx, query, inst.ID, inst.Name, inst.Address, inst.ContactPerson, inst.Email, inst.Phone, inst.ExternalID, inst.Source, inst.SyncedAt)
 	if err != nil {
 		return fmt.Errorf("gagal memperbarui institusi: %w", err)
 	}

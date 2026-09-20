@@ -72,6 +72,8 @@ func main() {
 
 	peopleRepo := people.NewRepository(db)
 	peopleService := people.NewService(peopleRepo, db, auditService, eventBus)
+	apiIndonesiaClient := people.NewAPIIndonesiaClient(cfg.APIIndonesiaBaseURL, cfg.APIIndonesiaKey)
+	peopleService.SetExternalDependencies(apiIndonesiaClient, rdb)
 	peopleCtrl := people.NewController(peopleService)
 
 	attendanceRepo := attendance.NewRepository(db)
@@ -223,9 +225,12 @@ func main() {
 		peopleRoutes := apiV1.Group("/people")
 		peopleRoutes.Use(middleware.AuthJWT(cfg))
 		{
-			// Institutions (FR-005, T-030)
+			// Institutions (FR-005, T-030) — katalog eksternal API Indonesia + database internal
 			peopleRoutes.POST("/institutions", middleware.RequirePermission(db, rdb, "people.institutions", "create", "WORKFORCE_AND_PEOPLE"), peopleCtrl.CreateInstitution)
 			peopleRoutes.GET("/institutions", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.ListInstitutions)
+			peopleRoutes.GET("/institutions/search-external", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.SearchExternalInstitutions)
+			peopleRoutes.GET("/institutions/external/:source/:external_id", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.GetExternalInstitutionDetail)
+			peopleRoutes.POST("/institutions/import-external", middleware.RequirePermission(db, rdb, "people.institutions", "create", "WORKFORCE_AND_PEOPLE"), peopleCtrl.ImportExternalInstitution)
 			peopleRoutes.GET("/institutions/:id", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.GetInstitutionByID)
 			peopleRoutes.PUT("/institutions/:id", middleware.RequirePermission(db, rdb, "people.institutions", "update", "WORKFORCE_AND_PEOPLE"), peopleCtrl.UpdateInstitution)
 			peopleRoutes.DELETE("/institutions/:id", middleware.RequirePermission(db, rdb, "people.institutions", "delete", "WORKFORCE_AND_PEOPLE"), peopleCtrl.DeleteInstitution)
