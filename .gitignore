@@ -4,6 +4,9 @@ ROADMAP.md
 docs/*
 !docs/additional/
 !docs/additional/**
+!docs/guide/
+docs/guide/*
+!docs/guide/CODING-STANDARDS.md
 
 # Environment variables
 .env
