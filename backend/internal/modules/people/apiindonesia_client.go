@@ -20,6 +20,8 @@ const (
 )
 
 // Respons external DTO dari API Indonesia untuk direktori kampus (GET /api/v1/kampus).
+// Field diselaraskan dengan respons produksi aktual: lat/lng dan created_at/updated_at
+// sengaja tidak dipetakan karena tidak ada kolom padanannya pada tabel institutions.
 type APIIndonesiaKampus struct {
 	ID            string  `json:"id"`
 	Name          string  `json:"name"`
@@ -30,6 +32,8 @@ type APIIndonesiaKampus struct {
 	RegencyID     string  `json:"regency_id"`
 	Address       *string `json:"address"`
 	PostalCode    *string `json:"postal_code"`
+	Phone         *string `json:"phone"`
+	Email         *string `json:"email"`
 	Website       *string `json:"website"`
 	Accreditation *string `json:"accreditation"`
 	IsActive      *int    `json:"is_active"`
@@ -347,19 +351,12 @@ func MapKampusToInstitutionDraft(ext *APIIndonesiaKampus) *Institution {
 		joined := strings.Join(parts, ", ")
 		inst.Address = &joined
 	}
-	if ext.Website != nil && strings.TrimSpace(*ext.Website) != "" {
-		website := strings.TrimSpace(*ext.Website)
-		inst.Email = nil
-		_ = website
+	if ext.Phone != nil && strings.TrimSpace(*ext.Phone) != "" {
+		inst.Phone = ext.Phone
 	}
-	meta := map[string]string{
-		"short_name":  stringOrEmpty(ext.ShortName),
-		"jenis":       ext.Jenis,
-		"kelompok":    ext.Kelompok,
-		"province_id": ext.ProvinceID,
-		"regency_id":  ext.RegencyID,
+	if ext.Email != nil && strings.TrimSpace(*ext.Email) != "" {
+		inst.Email = ext.Email
 	}
-	_ = meta
 	return inst
 }
 
@@ -387,12 +384,4 @@ func MapSekolahToInstitutionDraft(ext *APIIndonesiaSekolah) *Institution {
 func strPtr(s string) *string {
 	copied := s
 	return &copied
-}
-
-// Mengembalikan string kosong apabila pointer bernilai nil.
-func stringOrEmpty(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

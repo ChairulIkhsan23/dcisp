@@ -58,7 +58,8 @@ func newMockAPIIndonesiaServer() *httptest.Server {
 			"data": map[string]interface{}{
 				"id": "pt_001", "name": "INSTITUT TEKNOLOGI BANDUNG", "short_name": "ITB",
 				"jenis": "institut", "kelompok": "PTN", "province_id": "32", "regency_id": "3273",
-				"address": "Jl. Ganesha No. 10", "postal_code": "40132", "website": "https://itb.ac.id",
+				"address": "Jl. Ganesha No. 10", "postal_code": "40132",
+				"phone": "0222500935", "email": "info@itb.ac.id", "website": "https://itb.ac.id",
 				"accreditation": "Unggul", "is_active": 1, "province_name": "JAWA BARAT", "regency_name": "KOTA BANDUNG",
 			},
 		})
@@ -122,10 +123,14 @@ func TestAPIIndonesiaClientKampusAndErrors(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, emptyRes.Items, 0)
 
-	// 3. Detail kampus sukses
+	// 3. Detail kampus sukses beserta field kontak aktual API (phone/email)
 	detail, err := client.GetKampusDetail(ctx, "pt_001")
 	require.NoError(t, err)
 	assert.Equal(t, "INSTITUT TEKNOLOGI BANDUNG", detail.Name)
+	require.NotNil(t, detail.Phone)
+	assert.Equal(t, "0222500935", *detail.Phone)
+	require.NotNil(t, detail.Email)
+	assert.Equal(t, "info@itb.ac.id", *detail.Email)
 
 	// 4. Kredensial kosong ditolak sebelum request jaringan
 	badClient := people.NewAPIIndonesiaClient(mockServer.URL, "")
@@ -145,10 +150,13 @@ func TestAPIIndonesiaMapperToInternalDraft(t *testing.T) {
 	provinceName := "JAWA BARAT"
 	regencyName := "KOTA BANDUNG"
 	address := "Jl. Ganesha No. 10"
+	phone := "0222500935"
+	email := "info@itb.ac.id"
 	ext := &people.APIIndonesiaKampus{
 		ID: "pt_001", Name: "INSTITUT TEKNOLOGI BANDUNG", ShortName: &shortName,
 		Jenis: "institut", Kelompok: "PTN", ProvinceID: "32", RegencyID: "3273",
-		Address: &address, ProvinceName: &provinceName, RegencyName: &regencyName,
+		Address: &address, Phone: &phone, Email: &email,
+		ProvinceName: &provinceName, RegencyName: &regencyName,
 	}
 	draft := people.MapKampusToInstitutionDraft(ext)
 	assert.Equal(t, "INSTITUT TEKNOLOGI BANDUNG", draft.Name)
@@ -157,6 +165,10 @@ func TestAPIIndonesiaMapperToInternalDraft(t *testing.T) {
 	require.NotNil(t, draft.Source)
 	assert.Equal(t, "API_KAMPUS", *draft.Source)
 	assert.Contains(t, *draft.Address, "Jl. Ganesha No. 10")
+	require.NotNil(t, draft.Phone)
+	assert.Equal(t, "0222500935", *draft.Phone)
+	require.NotNil(t, draft.Email)
+	assert.Equal(t, "info@itb.ac.id", *draft.Email)
 
 	sekolahExt := &people.APIIndonesiaSekolah{NPSN: "20219557", Name: "SMA NEGERI 3 BANDUNG", Jenis: "SMA", Status: "Negeri"}
 	sekolahDraft := people.MapSekolahToInstitutionDraft(sekolahExt)
