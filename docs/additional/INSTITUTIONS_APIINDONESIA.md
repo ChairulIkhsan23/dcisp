@@ -45,8 +45,9 @@ Application (interns.institution_id FK RESTRICT)
 ```
 
 - **Modul mandiri** `internal/integrations/`: `Registry` generik (`Register`/`Get`/`Names` via interface `Provider`) + paket provider `apiindonesia` (client + DTO `Kampus`/`Sekolah`/`Meta`). Provider API lain cukup mengimplementasikan `Name() string` lalu didaftarkan di `cmd/api/main.go` — tanpa mengubah modul domain.
+- **Subpaket khusus** `internal/modules/people/institutions/` (service + controller + mapper): seluruh logika katalog eksternal terisolasi di sini; modul induk `people` hanya menyimpan CRUD internal + relasi `interns`. Arah dependensi satu arah (`institutions` → `people`), tanpa import-cycle.
 - **External DTO** (`apiindonesia.Kampus`, `apiindonesia.Sekolah`) terpisah dari model internal.
-- **Mapper** di modul people (`MapKampusToInstitutionDraft`, `MapSekolahToInstitutionDraft` pada `institution_external_mapper.go`) mengonversi ke draf internal.
+- **Mapper** (`MapKampusToInstitutionDraft`, `MapSekolahToInstitutionDraft`) mengonversi ke draf internal.
 - Business logic tetap di service layer; client hanya request/auth/timeout/parse/pagination.
 
 ## 4. Identifier Mapping & Database

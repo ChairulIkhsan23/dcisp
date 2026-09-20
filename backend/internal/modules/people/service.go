@@ -7,19 +7,16 @@ import (
 	"time"
 
 	"dcisp/backend/internal/database"
-	"dcisp/backend/internal/integrations/apiindonesia"
 	"dcisp/backend/internal/modules/system"
 	"dcisp/backend/internal/shared/eventbus"
 	"github.com/google/uuid"
 )
 
 type Service struct {
-	repo           *Repository
-	db             *database.PostgresDB
-	auditService   *system.AuditService
-	eventBus       *eventbus.EventBus
-	externalClient *apiindonesia.Client
-	redisClient    *database.RedisClient
+	repo         *Repository
+	db           *database.PostgresDB
+	auditService *system.AuditService
+	eventBus     *eventbus.EventBus
 }
 
 // Menginisialisasi instance baru service people and lifecycle management.
@@ -30,12 +27,6 @@ func NewService(repo *Repository, db *database.PostgresDB, audit *system.AuditSe
 		auditService: audit,
 		eventBus:     bus,
 	}
-}
-
-// Menetapkan klien eksternal API Indonesia dan Redis cache untuk pencarian institusi.
-func (s *Service) SetExternalDependencies(client *apiindonesia.Client, rdb *database.RedisClient) {
-	s.externalClient = client
-	s.redisClient = rdb
 }
 
 // ============================================================================

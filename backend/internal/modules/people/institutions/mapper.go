@@ -1,24 +1,17 @@
-package people
+package institutions
 
 import (
 	"strings"
 
 	"dcisp/backend/internal/integrations/apiindonesia"
-)
-
-// Sumber data eksternal institusi yang didukung.
-const (
-	InstitutionSourceManual       = "MANUAL"
-	InstitutionSourceAPIKampus    = "API_KAMPUS"
-	InstitutionSourceAPISekolah   = "API_SEKOLAH"
-	InstitutionSourceAPIINDONESIA = "API_INDONESIA"
+	"dcisp/backend/internal/modules/people"
 )
 
 // Memetakan respons kampus eksternal menjadi draf institusi internal tanpa menyimpan kredensial eksternal.
-func MapKampusToInstitutionDraft(ext *apiindonesia.Kampus) *Institution {
-	inst := &Institution{
+func MapKampusToInstitutionDraft(ext *apiindonesia.Kampus) *people.Institution {
+	inst := &people.Institution{
 		Name:   ext.Name,
-		Source: strPtr(InstitutionSourceAPIKampus),
+		Source: strPtr(people.InstitutionSourceAPIKampus),
 	}
 	externalID := "kampus:" + ext.ID
 	inst.ExternalID = &externalID
@@ -46,10 +39,10 @@ func MapKampusToInstitutionDraft(ext *apiindonesia.Kampus) *Institution {
 }
 
 // Memetakan respons sekolah eksternal menjadi draf institusi internal.
-func MapSekolahToInstitutionDraft(ext *apiindonesia.Sekolah) *Institution {
-	inst := &Institution{
+func MapSekolahToInstitutionDraft(ext *apiindonesia.Sekolah) *people.Institution {
+	inst := &people.Institution{
 		Name:   ext.Name,
-		Source: strPtr(InstitutionSourceAPISekolah),
+		Source: strPtr(people.InstitutionSourceAPISekolah),
 	}
 	externalID := "sekolah:" + ext.NPSN
 	inst.ExternalID = &externalID

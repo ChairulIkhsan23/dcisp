@@ -13,6 +13,7 @@ import (
 	"dcisp/backend/internal/database"
 	"dcisp/backend/internal/integrations/apiindonesia"
 	"dcisp/backend/internal/modules/people"
+	"dcisp/backend/internal/modules/people/institutions"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/stretchr/testify/assert"
@@ -159,7 +160,7 @@ func TestAPIIndonesiaMapperToInternalDraft(t *testing.T) {
 		Address: &address, Phone: &phone, Email: &email,
 		ProvinceName: &provinceName, RegencyName: &regencyName,
 	}
-	draft := people.MapKampusToInstitutionDraft(ext)
+	draft := institutions.MapKampusToInstitutionDraft(ext)
 	assert.Equal(t, "INSTITUT TEKNOLOGI BANDUNG", draft.Name)
 	require.NotNil(t, draft.ExternalID)
 	assert.Equal(t, "kampus:pt_001", *draft.ExternalID)
@@ -172,7 +173,7 @@ func TestAPIIndonesiaMapperToInternalDraft(t *testing.T) {
 	assert.Equal(t, "info@itb.ac.id", *draft.Email)
 
 	sekolahExt := &apiindonesia.Sekolah{NPSN: "20219557", Name: "SMA NEGERI 3 BANDUNG", Jenis: "SMA", Status: "Negeri"}
-	sekolahDraft := people.MapSekolahToInstitutionDraft(sekolahExt)
+	sekolahDraft := institutions.MapSekolahToInstitutionDraft(sekolahExt)
 	assert.Equal(t, "sekolah:20219557", *sekolahDraft.ExternalID)
 }
 
@@ -190,9 +191,8 @@ func TestImportExternalInstitutionIdempotent(t *testing.T) {
 	defer mockServer.Close()
 
 	repo := people.NewRepository(db)
-	service := people.NewService(repo, db, nil, nil)
 	client := apiindonesia.NewClient(mockServer.URL, "aip_live_test_key")
-	service.SetExternalDependencies(client, nil)
+	service := institutions.NewService(repo, nil, client, nil)
 	ctx := context.Background()
 
 	// Pastikan kolom eksternal tersedia (idempoten terhadap migrasi 000004)
@@ -202,7 +202,7 @@ func TestImportExternalInstitutionIdempotent(t *testing.T) {
 	_, _ = db.Pool.Exec(ctx, `DELETE FROM institutions WHERE external_id = 'kampus:pt_001'`)
 
 	// 1. Impor pertama harus membuat record baru (isNew = true)
-	inst1, isNew1, err := service.ImportExternalInstitution(ctx, &people.ImportExternalInstitutionRequest{
+	inst1, isNew1, err := service.ImportExternalInstitution(ctx, &institutions.ImportRequest{
 		Source: "API_KAMPUS", ExternalID: "pt_001",
 	})
 	require.NoError(t, err)
@@ -210,7 +210,7 @@ func TestImportExternalInstitutionIdempotent(t *testing.T) {
 	assert.Equal(t, "INSTITUT TEKNOLOGI BANDUNG", inst1.Name)
 
 	// 2. Impor kedua dengan external_id sama harus idempoten (isNew = false, ID sama)
-	inst2, isNew2, err := service.ImportExternalInstitution(ctx, &people.ImportExternalInstitutionRequest{
+	inst2, isNew2, err := service.ImportExternalInstitution(ctx, &institutions.ImportRequest{
 		Source: "API_KAMPUS", ExternalID: "kampus:pt_001",
 	})
 	require.NoError(t, err)

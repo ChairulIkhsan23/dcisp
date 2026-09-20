@@ -25,6 +25,20 @@ const (
 	BatchStatusArchived  = "ARCHIVED"
 )
 
+// Sumber data katalog institusi (kolom institutions.source).
+const (
+	InstitutionSourceManual       = "MANUAL"
+	InstitutionSourceAPIKampus    = "API_KAMPUS"
+	InstitutionSourceAPISekolah   = "API_SEKOLAH"
+	InstitutionSourceAPIINDONESIA = "API_INDONESIA"
+)
+
+// Mengembalikan pointer string untuk nilai opsional.
+func strPtr(s string) *string {
+	copied := s
+	return &copied
+}
+
 type Institution struct {
 	ID            uuid.UUID  `json:"id" db:"id"`
 	Name          string     `json:"name" db:"name"`

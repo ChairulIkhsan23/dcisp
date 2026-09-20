@@ -18,6 +18,7 @@ import (
 	"dcisp/backend/internal/modules/documents"
 	"dcisp/backend/internal/modules/identity"
 	"dcisp/backend/internal/modules/people"
+	"dcisp/backend/internal/modules/people/institutions"
 	"dcisp/backend/internal/modules/performance"
 	"dcisp/backend/internal/modules/projects"
 	"dcisp/backend/internal/modules/system"
@@ -82,8 +83,9 @@ func main() {
 
 	peopleRepo := people.NewRepository(db)
 	peopleService := people.NewService(peopleRepo, db, auditService, eventBus)
-	peopleService.SetExternalDependencies(apiIndonesiaClient, rdb)
 	peopleCtrl := people.NewController(peopleService)
+	institutionsService := institutions.NewService(peopleRepo, rdb, apiIndonesiaClient, auditService)
+	institutionsCtrl := institutions.NewController(institutionsService)
 
 	attendanceRepo := attendance.NewRepository(db)
 	attendanceService := attendance.NewService(attendanceRepo, db, rdb, cfg, auditService, eventBus)
@@ -237,9 +239,9 @@ func main() {
 			// Institutions (FR-005, T-030) — katalog eksternal API Indonesia + database internal
 			peopleRoutes.POST("/institutions", middleware.RequirePermission(db, rdb, "people.institutions", "create", "WORKFORCE_AND_PEOPLE"), peopleCtrl.CreateInstitution)
 			peopleRoutes.GET("/institutions", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.ListInstitutions)
-			peopleRoutes.GET("/institutions/search-external", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.SearchExternalInstitutions)
-			peopleRoutes.GET("/institutions/external/:source/:external_id", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.GetExternalInstitutionDetail)
-			peopleRoutes.POST("/institutions/import-external", middleware.RequirePermission(db, rdb, "people.institutions", "create", "WORKFORCE_AND_PEOPLE"), peopleCtrl.ImportExternalInstitution)
+			peopleRoutes.GET("/institutions/search-external", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), institutionsCtrl.SearchExternalInstitutions)
+			peopleRoutes.GET("/institutions/external/:source/:external_id", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), institutionsCtrl.GetExternalInstitutionDetail)
+			peopleRoutes.POST("/institutions/import-external", middleware.RequirePermission(db, rdb, "people.institutions", "create", "WORKFORCE_AND_PEOPLE"), institutionsCtrl.ImportExternalInstitution)
 			peopleRoutes.GET("/institutions/:id", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.GetInstitutionByID)
 			peopleRoutes.PUT("/institutions/:id", middleware.RequirePermission(db, rdb, "people.institutions", "update", "WORKFORCE_AND_PEOPLE"), peopleCtrl.UpdateInstitution)
 			peopleRoutes.DELETE("/institutions/:id", middleware.RequirePermission(db, rdb, "people.institutions", "delete", "WORKFORCE_AND_PEOPLE"), peopleCtrl.DeleteInstitution)

@@ -1,4 +1,4 @@
-package people
+package institutions
 
 import (
 	"context"
@@ -7,13 +7,34 @@ import (
 	"strings"
 	"time"
 
+	"dcisp/backend/internal/database"
 	"dcisp/backend/internal/integrations/apiindonesia"
+	"dcisp/backend/internal/modules/people"
 	"dcisp/backend/internal/modules/system"
 	"github.com/google/uuid"
 )
 
+// Service mengelola pencarian, detail, dan impor institusi dari katalog eksternal
+// API Indonesia ke database internal secara idempoten.
+type Service struct {
+	repo   *people.Repository
+	redis  *database.RedisClient
+	client *apiindonesia.Client
+	audit  *system.AuditService
+}
+
+// Menginisialisasi service katalog institusi eksternal dengan dependensi yang dibutuhkan.
+func NewService(repo *people.Repository, rdb *database.RedisClient, client *apiindonesia.Client, audit *system.AuditService) *Service {
+	return &Service{
+		repo:   repo,
+		redis:  rdb,
+		client: client,
+		audit:  audit,
+	}
+}
+
 // Membangun entri audit untuk impor institusi eksternal tanpa membocorkan kredensial API.
-func importAuditEntry(draft *Institution) system.MutationAuditEntry {
+func importAuditEntry(draft *people.Institution) system.MutationAuditEntry {
 	externalID := ""
 	if draft.ExternalID != nil {
 		externalID = *draft.ExternalID
@@ -35,20 +56,20 @@ func importAuditEntry(draft *Institution) system.MutationAuditEntry {
 }
 
 // Hasil pencarian gabungan institusi eksternal (kampus + sekolah).
-type ExternalInstitutionSearchResult struct {
+type SearchResult struct {
 	Kampus  *apiindonesia.SearchKampusResult  `json:"kampus,omitempty"`
 	Sekolah *apiindonesia.SearchSekolahResult `json:"sekolah,omitempty"`
 }
 
 // Permintaan impor institusi eksternal ke database internal.
-type ImportExternalInstitutionRequest struct {
+type ImportRequest struct {
 	Source     string `json:"source" binding:"required"` // API_KAMPUS atau API_SEKOLAH
 	ExternalID string `json:"external_id" binding:"required"`
 }
 
 // Mencari institusi pendidikan pada Public API API Indonesia dengan cache Redis 30 menit.
-func (s *Service) SearchExternalInstitutions(ctx context.Context, query, source, province, regency string, page, perPage int) (*ExternalInstitutionSearchResult, error) {
-	if s.externalClient == nil {
+func (s *Service) SearchExternalInstitutions(ctx context.Context, query, source, province, regency string, page, perPage int) (*SearchResult, error) {
+	if s.client == nil {
 		return nil, fmt.Errorf("integrasi API Indonesia belum dikonfigurasi pada server")
 	}
 	if len(strings.TrimSpace(query)) < 2 && strings.TrimSpace(province) == "" && strings.TrimSpace(regency) == "" {
@@ -62,20 +83,20 @@ func (s *Service) SearchExternalInstitutions(ctx context.Context, query, source,
 	}
 
 	cacheKey := fmt.Sprintf("apiindonesia:institutions:%s:%s:%s:%s:%d:%d", strings.ToLower(source), strings.ToLower(query), province, regency, page, perPage)
-	if s.redisClient != nil && s.redisClient.Client != nil {
-		if cached, err := s.redisClient.Client.Get(ctx, cacheKey).Result(); err == nil && cached != "" {
-			var cachedResult ExternalInstitutionSearchResult
+	if s.redis != nil && s.redis.Client != nil {
+		if cached, err := s.redis.Client.Get(ctx, cacheKey).Result(); err == nil && cached != "" {
+			var cachedResult SearchResult
 			if err := json.Unmarshal([]byte(cached), &cachedResult); err == nil {
 				return &cachedResult, nil
 			}
 		}
 	}
 
-	result := &ExternalInstitutionSearchResult{}
+	result := &SearchResult{}
 	normalizedSource := strings.ToUpper(strings.TrimSpace(source))
 
 	if normalizedSource == "" || normalizedSource == "KAMPUS" || normalizedSource == "API_KAMPUS" || normalizedSource == "ALL" {
-		kampusRes, err := s.externalClient.SearchKampus(ctx, apiindonesia.SearchKampusParams{
+		kampusRes, err := s.client.SearchKampus(ctx, apiindonesia.SearchKampusParams{
 			Query:    query,
 			Province: province,
 			Regency:  regency,
@@ -89,7 +110,7 @@ func (s *Service) SearchExternalInstitutions(ctx context.Context, query, source,
 	}
 
 	if normalizedSource == "" || normalizedSource == "SEKOLAH" || normalizedSource == "API_SEKOLAH" || normalizedSource == "ALL" {
-		sekolahRes, err := s.externalClient.SearchSekolah(ctx, apiindonesia.SearchSekolahParams{
+		sekolahRes, err := s.client.SearchSekolah(ctx, apiindonesia.SearchSekolahParams{
 			Query:    query,
 			Province: province,
 			Regency:  regency,
@@ -106,9 +127,9 @@ func (s *Service) SearchExternalInstitutions(ctx context.Context, query, source,
 		result.Sekolah = sekolahRes
 	}
 
-	if s.redisClient != nil && s.redisClient.Client != nil {
+	if s.redis != nil && s.redis.Client != nil {
 		if payload, err := json.Marshal(result); err == nil {
-			_ = s.redisClient.Client.Set(ctx, cacheKey, payload, 30*time.Minute).Err()
+			_ = s.redis.Client.Set(ctx, cacheKey, payload, 30*time.Minute).Err()
 		}
 	}
 
@@ -117,24 +138,24 @@ func (s *Service) SearchExternalInstitutions(ctx context.Context, query, source,
 
 // Mengambil detail institusi eksternal berdasarkan sumber dan ID eksternal.
 func (s *Service) GetExternalInstitutionDetail(ctx context.Context, source, externalID string) (interface{}, error) {
-	if s.externalClient == nil {
+	if s.client == nil {
 		return nil, fmt.Errorf("integrasi API Indonesia belum dikonfigurasi pada server")
 	}
 	switch strings.ToUpper(strings.TrimSpace(source)) {
 	case "API_KAMPUS", "KAMPUS":
 		cleanID := strings.TrimPrefix(externalID, "kampus:")
-		return s.externalClient.GetKampusDetail(ctx, cleanID)
+		return s.client.GetKampusDetail(ctx, cleanID)
 	case "API_SEKOLAH", "SEKOLAH":
 		cleanID := strings.TrimPrefix(externalID, "sekolah:")
-		return s.externalClient.GetSekolahDetail(ctx, cleanID)
+		return s.client.GetSekolahDetail(ctx, cleanID)
 	default:
 		return nil, fmt.Errorf("sumber institusi eksternal tidak valid (gunakan API_KAMPUS atau API_SEKOLAH)")
 	}
 }
 
 // Mengimpor satu institusi eksternal dari API Indonesia ke database internal secara idempoten.
-func (s *Service) ImportExternalInstitution(ctx context.Context, req *ImportExternalInstitutionRequest) (*Institution, bool, error) {
-	if s.externalClient == nil {
+func (s *Service) ImportExternalInstitution(ctx context.Context, req *ImportRequest) (*people.Institution, bool, error) {
+	if s.client == nil {
 		return nil, false, fmt.Errorf("integrasi API Indonesia belum dikonfigurasi pada server")
 	}
 	source := strings.ToUpper(strings.TrimSpace(req.Source))
@@ -144,12 +165,12 @@ func (s *Service) ImportExternalInstitution(ctx context.Context, req *ImportExte
 	}
 
 	var normalizedExternalID string
-	var draft *Institution
+	var draft *people.Institution
 
 	switch source {
 	case "API_KAMPUS", "KAMPUS":
 		cleanID := strings.TrimPrefix(externalID, "kampus:")
-		detail, err := s.externalClient.GetKampusDetail(ctx, cleanID)
+		detail, err := s.client.GetKampusDetail(ctx, cleanID)
 		if err != nil {
 			return nil, false, err
 		}
@@ -157,7 +178,7 @@ func (s *Service) ImportExternalInstitution(ctx context.Context, req *ImportExte
 		normalizedExternalID = "kampus:" + detail.ID
 	case "API_SEKOLAH", "SEKOLAH":
 		cleanID := strings.TrimPrefix(externalID, "sekolah:")
-		detail, err := s.externalClient.GetSekolahDetail(ctx, cleanID)
+		detail, err := s.client.GetSekolahDetail(ctx, cleanID)
 		if err != nil {
 			return nil, false, err
 		}
@@ -191,8 +212,8 @@ func (s *Service) ImportExternalInstitution(ctx context.Context, req *ImportExte
 		return nil, false, err
 	}
 
-	if s.auditService != nil {
-		_ = s.auditService.RecordMutation(ctx, importAuditEntry(draft))
+	if s.audit != nil {
+		_ = s.audit.RecordMutation(ctx, importAuditEntry(draft))
 	}
 
 	return draft, true, nil
