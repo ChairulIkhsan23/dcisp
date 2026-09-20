@@ -14,6 +14,7 @@ import (
 	"dcisp/backend/internal/middleware"
 	"dcisp/backend/internal/modules/documents"
 	"dcisp/backend/internal/modules/identity"
+	"dcisp/backend/internal/modules/people"
 	"dcisp/backend/internal/modules/system"
 	"dcisp/backend/internal/shared/eventbus"
 	"dcisp/backend/internal/shared/response"
@@ -63,12 +64,16 @@ func main() {
 	storageService := documents.NewStorageService(db, cfg)
 	storageCtrl := documents.NewStorageController(storageService)
 
+	auditService := system.NewAuditService(db)
+	auditCtrl := system.NewAuditController(auditService)
+
+	peopleRepo := people.NewRepository(db)
+	peopleService := people.NewService(peopleRepo, db, auditService, eventBus)
+	peopleCtrl := people.NewController(peopleService)
+
 	policyRepo := system.NewPolicyRepository(db)
 	policyService := system.NewPolicyService(policyRepo, rdb)
 	policyCtrl := system.NewPolicyController(policyService)
-
-	auditService := system.NewAuditService(db)
-	auditCtrl := system.NewAuditController(auditService)
 
 	settingsRepo := system.NewSettingsRepository(db)
 	settingsService := system.NewSettingsService(settingsRepo, rdb)
@@ -197,6 +202,44 @@ func main() {
 			systemRoutes.GET("/settings", middleware.RequirePermission(db, rdb, "system.settings", "view", "SYSTEM"), settingsCtrl.ListSettings)
 			systemRoutes.GET("/settings/:key", middleware.RequirePermission(db, rdb, "system.settings", "view", "SYSTEM"), settingsCtrl.GetSetting)
 			systemRoutes.DELETE("/settings/:key", middleware.RequirePermission(db, rdb, "system.settings", "delete", "SYSTEM"), settingsCtrl.DeleteSetting)
+		}
+
+		// People & Lifecycle Management (Domain 2: FR-002 s/d FR-006)
+		peopleRoutes := apiV1.Group("/people")
+		peopleRoutes.Use(middleware.AuthJWT(cfg))
+		{
+			// Institutions (FR-005, T-030)
+			peopleRoutes.POST("/institutions", middleware.RequirePermission(db, rdb, "people.institutions", "create", "WORKFORCE_AND_PEOPLE"), peopleCtrl.CreateInstitution)
+			peopleRoutes.GET("/institutions", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.ListInstitutions)
+			peopleRoutes.GET("/institutions/:id", middleware.RequirePermission(db, rdb, "people.institutions", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.GetInstitutionByID)
+			peopleRoutes.PUT("/institutions/:id", middleware.RequirePermission(db, rdb, "people.institutions", "update", "WORKFORCE_AND_PEOPLE"), peopleCtrl.UpdateInstitution)
+			peopleRoutes.DELETE("/institutions/:id", middleware.RequirePermission(db, rdb, "people.institutions", "delete", "WORKFORCE_AND_PEOPLE"), peopleCtrl.DeleteInstitution)
+
+			// Batches & Cohorts (FR-004, T-028)
+			peopleRoutes.POST("/batches", middleware.RequirePermission(db, rdb, "people.batches", "create", "WORKFORCE_AND_PEOPLE"), peopleCtrl.CreateBatch)
+			peopleRoutes.GET("/batches", middleware.RequirePermission(db, rdb, "people.batches", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.ListBatches)
+			peopleRoutes.GET("/batches/:id", middleware.RequirePermission(db, rdb, "people.batches", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.GetBatchByID)
+			peopleRoutes.PUT("/batches/:id", middleware.RequirePermission(db, rdb, "people.batches", "update", "WORKFORCE_AND_PEOPLE"), peopleCtrl.UpdateBatch)
+
+			// Interns & Lifecycle State Machine (FR-002, T-027, T-032)
+			peopleRoutes.POST("/interns", middleware.RequirePermission(db, rdb, "people.interns", "create", "WORKFORCE_AND_PEOPLE"), peopleCtrl.RegisterIntern)
+			peopleRoutes.GET("/interns", middleware.RequirePermission(db, rdb, "people.interns", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.SearchInterns)
+			peopleRoutes.GET("/interns/:id", middleware.RequirePermission(db, rdb, "people.interns", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.GetInternByID)
+			peopleRoutes.GET("/interns/by-user/:user_id", middleware.RequirePermission(db, rdb, "people.interns", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.GetInternByUserID)
+			peopleRoutes.PATCH("/interns/:id/status", middleware.RequirePermission(db, rdb, "people.interns", "update", "WORKFORCE_AND_PEOPLE"), peopleCtrl.ChangeInternStatus)
+			peopleRoutes.PATCH("/interns/:id/mentor", middleware.RequirePermission(db, rdb, "people.interns", "update", "WORKFORCE_AND_PEOPLE"), peopleCtrl.AssignMentor)
+			peopleRoutes.PATCH("/interns/:id/batch", middleware.RequirePermission(db, rdb, "people.interns", "update", "WORKFORCE_AND_PEOPLE"), peopleCtrl.PlotBatch)
+
+			// Alumni (FR-003, BR-003, T-029)
+			peopleRoutes.GET("/alumni", middleware.RequirePermission(db, rdb, "people.alumni", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.ListAlumni)
+			peopleRoutes.GET("/alumni/by-user/:user_id", middleware.RequirePermission(db, rdb, "people.alumni", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.GetAlumniByUserID)
+
+			// Skills & Skill Matrix (FR-006, T-031)
+			peopleRoutes.POST("/skills", middleware.RequirePermission(db, rdb, "people.skills", "create", "WORKFORCE_AND_PEOPLE"), peopleCtrl.CreateSkill)
+			peopleRoutes.GET("/skills", middleware.RequirePermission(db, rdb, "people.skills", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.ListSkills)
+			peopleRoutes.POST("/skills/user-skills/:user_id", middleware.RequirePermission(db, rdb, "people.skills", "update", "WORKFORCE_AND_PEOPLE"), peopleCtrl.AssignUserSkill)
+			peopleRoutes.GET("/skills/user-skills/:user_id", middleware.RequirePermission(db, rdb, "people.skills", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.GetUserSkills)
+			peopleRoutes.DELETE("/skills/user-skills/:user_id/:skill_id", middleware.RequirePermission(db, rdb, "people.skills", "delete", "WORKFORCE_AND_PEOPLE"), peopleCtrl.DeleteUserSkill)
 		}
 	}
 
