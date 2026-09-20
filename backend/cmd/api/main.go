@@ -12,6 +12,7 @@ import (
 	"dcisp/backend/internal/config"
 	"dcisp/backend/internal/database"
 	"dcisp/backend/internal/middleware"
+	"dcisp/backend/internal/modules/attendance"
 	"dcisp/backend/internal/modules/documents"
 	"dcisp/backend/internal/modules/identity"
 	"dcisp/backend/internal/modules/people"
@@ -70,6 +71,10 @@ func main() {
 	peopleRepo := people.NewRepository(db)
 	peopleService := people.NewService(peopleRepo, db, auditService, eventBus)
 	peopleCtrl := people.NewController(peopleService)
+
+	attendanceRepo := attendance.NewRepository(db)
+	attendanceService := attendance.NewService(attendanceRepo, db, rdb, cfg, auditService, eventBus)
+	attendanceCtrl := attendance.NewController(attendanceService)
 
 	policyRepo := system.NewPolicyRepository(db)
 	policyService := system.NewPolicyService(policyRepo, rdb)
@@ -240,6 +245,49 @@ func main() {
 			peopleRoutes.POST("/skills/user-skills/:user_id", middleware.RequirePermission(db, rdb, "people.skills", "update", "WORKFORCE_AND_PEOPLE"), peopleCtrl.AssignUserSkill)
 			peopleRoutes.GET("/skills/user-skills/:user_id", middleware.RequirePermission(db, rdb, "people.skills", "view", "WORKFORCE_AND_PEOPLE"), peopleCtrl.GetUserSkills)
 			peopleRoutes.DELETE("/skills/user-skills/:user_id/:skill_id", middleware.RequirePermission(db, rdb, "people.skills", "delete", "WORKFORCE_AND_PEOPLE"), peopleCtrl.DeleteUserSkill)
+		}
+
+		// Attendance & Presensi (Domain 3: FR-007 s/d FR-015)
+		attendanceRoutes := apiV1.Group("/attendance")
+		{
+			// Terminal Tap & Offline Sync (FR-008, T-034, T-042)
+			attendanceRoutes.POST("/terminal-tap", attendanceCtrl.HandleTerminalTap)
+			attendanceRoutes.POST("/sync-offline", attendanceCtrl.SyncOffline)
+			attendanceRoutes.GET("/audio-catalog", attendanceCtrl.GetAudioCatalog)
+
+			// Protected Attendance endpoints
+			protectedAttendance := attendanceRoutes.Group("")
+			protectedAttendance.Use(middleware.AuthJWT(cfg))
+			{
+				// Dynamic QR Code (T-043)
+				protectedAttendance.POST("/qr/generate", attendanceCtrl.GenerateQR)
+
+				// Overtime (FR-012, T-038)
+				protectedAttendance.POST("/overtime/request", attendanceCtrl.RequestOvertime)
+				protectedAttendance.PATCH("/overtime/:id/review", middleware.RequirePermission(db, rdb, "attendance.overtime", "review", "ASSIGNED_TEAM"), attendanceCtrl.ReviewOvertime)
+
+				// Leave (FR-014, T-039)
+				protectedAttendance.POST("/leave/request", attendanceCtrl.RequestLeave)
+				protectedAttendance.PATCH("/leave/:id/review", middleware.RequirePermission(db, rdb, "attendance.leave", "review", "WORKFORCE_AND_PEOPLE"), attendanceCtrl.ReviewLeave)
+
+				// Corrections (FR-015, T-040)
+				protectedAttendance.POST("/corrections", attendanceCtrl.RequestCorrection)
+				protectedAttendance.PATCH("/corrections/:id/review", middleware.RequirePermission(db, rdb, "attendance.corrections", "review", "ASSIGNED_TEAM"), attendanceCtrl.ReviewCorrection)
+
+				// Device Registry (FR-013, T-041)
+				protectedAttendance.POST("/devices", middleware.RequirePermission(db, rdb, "attendance.devices", "create", "SYSTEM"), attendanceCtrl.RegisterDevice)
+				protectedAttendance.GET("/devices", middleware.RequirePermission(db, rdb, "attendance.devices", "view", "SYSTEM"), attendanceCtrl.ListDevices)
+				protectedAttendance.POST("/devices/:id/heartbeat", attendanceCtrl.DeviceHeartbeat)
+			}
+		}
+
+		// Work Sessions & Breaks (FR-009, FR-010, T-036, T-037)
+		workSessionRoutes := apiV1.Group("/work-sessions")
+		workSessionRoutes.Use(middleware.AuthJWT(cfg))
+		{
+			workSessionRoutes.POST("/start", attendanceCtrl.StartWorkSession)
+			workSessionRoutes.POST("/break", attendanceCtrl.ProcessBreak)
+			workSessionRoutes.POST("/end", attendanceCtrl.EndWorkSession)
 		}
 	}
 
