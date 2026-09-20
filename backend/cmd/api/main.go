@@ -16,6 +16,7 @@ import (
 	"dcisp/backend/internal/modules/documents"
 	"dcisp/backend/internal/modules/identity"
 	"dcisp/backend/internal/modules/people"
+	"dcisp/backend/internal/modules/performance"
 	"dcisp/backend/internal/modules/projects"
 	"dcisp/backend/internal/modules/system"
 	"dcisp/backend/internal/shared/eventbus"
@@ -80,6 +81,10 @@ func main() {
 	projectsRepo := projects.NewRepository(db)
 	projectsService := projects.NewService(projectsRepo, db, storageService, auditService, eventBus)
 	projectsCtrl := projects.NewController(projectsService)
+
+	performanceRepo := performance.NewRepository(db)
+	performanceService := performance.NewService(performanceRepo, db, auditService, eventBus)
+	performanceCtrl := performance.NewController(performanceService)
 
 	policyRepo := system.NewPolicyRepository(db)
 	policyService := system.NewPolicyService(policyRepo, rdb)
@@ -335,6 +340,34 @@ func main() {
 			tasksRoutes.PATCH("/:id/status", projectsCtrl.ChangeTaskStatus)
 			tasksRoutes.POST("/:id/submissions", projectsCtrl.SubmitWorkReport)
 			tasksRoutes.PATCH("/submissions/:id/review", middleware.RequirePermission(db, rdb, "tasks.submissions", "review", "ASSIGNED_TASKS"), projectsCtrl.ReviewWorkReport)
+		}
+
+		// Performance & Gamification Routes (Domain 5: FR-025 s/d FR-030)
+		performanceRoutes := apiV1.Group("/performance")
+		performanceRoutes.Use(middleware.AuthJWT(cfg))
+		{
+			// XP & Ranks (FR-025, FR-026, T-054, T-056)
+			performanceRoutes.GET("/my-stats", performanceCtrl.GetMyStats)
+			performanceRoutes.GET("/users/:user_id/stats", performanceCtrl.GetUserStats)
+			performanceRoutes.POST("/xp/mutate", middleware.RequirePermission(db, rdb, "performance.xp", "mutate", "SYSTEM"), performanceCtrl.MutateXP)
+			performanceRoutes.GET("/xp/history", performanceCtrl.GetXPHistory)
+			performanceRoutes.GET("/ranks", performanceCtrl.ListRanks)
+
+			// Evaluations (FR-027, T-058)
+			performanceRoutes.POST("/evaluations", middleware.RequirePermission(db, rdb, "performance.evaluations", "create", "ASSIGNED_TEAM"), performanceCtrl.CreateEvaluation)
+			performanceRoutes.GET("/evaluations/:id", performanceCtrl.GetEvaluationByID)
+
+			// Top Performer (FR-028, T-059)
+			performanceRoutes.POST("/batches/:batch_id/top-performer", middleware.RequirePermission(db, rdb, "performance.top_performer", "create", "WORKFORCE_AND_PEOPLE"), performanceCtrl.DetermineTopPerformer)
+
+			// Achievements (FR-029, T-060)
+			performanceRoutes.GET("/achievements", performanceCtrl.ListAchievements)
+			performanceRoutes.POST("/achievements", middleware.RequirePermission(db, rdb, "performance.achievements", "create", "SYSTEM"), performanceCtrl.CreateAchievement)
+			performanceRoutes.GET("/my-achievements", performanceCtrl.GetMyAchievements)
+			performanceRoutes.POST("/achievements/:code/unlock", performanceCtrl.UnlockAchievement)
+
+			// Skill Growth Matrix (FR-030, T-061)
+			performanceRoutes.GET("/my-skill-growth", performanceCtrl.GetMySkillGrowth)
 		}
 	}
 
