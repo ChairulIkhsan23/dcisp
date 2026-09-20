@@ -1,7 +1,9 @@
 # Documentation, Agent Instructions & Roadmap
 AGENTS.md
 ROADMAP.md
-docs/
+docs/*
+!docs/additional/
+!docs/additional/**
 
 # Environment variables
 .env
