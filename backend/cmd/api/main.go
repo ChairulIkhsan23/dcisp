@@ -12,8 +12,12 @@ import (
 	"dcisp/backend/internal/config"
 	"dcisp/backend/internal/database"
 	"dcisp/backend/internal/middleware"
+	"dcisp/backend/internal/modules/documents"
 	"dcisp/backend/internal/modules/identity"
+	"dcisp/backend/internal/modules/system"
+	"dcisp/backend/internal/shared/eventbus"
 	"dcisp/backend/internal/shared/response"
+	"dcisp/backend/internal/worker"
 	"github.com/gin-gonic/gin"
 )
 
@@ -44,12 +48,35 @@ func main() {
 	}
 	defer rdb.Close()
 
-	// 4. Initialize Modular Services & Controllers
+	// 4. Initialize Background Worker & Event Bus
+	workerPool := worker.NewWorkerPool(cfg)
+	if err := workerPool.Start(); err != nil {
+		log.Printf("Peringatan: Gagal menjalankan Asynq worker server: %v", err)
+	}
+	eventBus := eventbus.NewEventBus(workerPool)
+
+	// 5. Initialize Modular Services & Controllers
 	identityRepo := identity.NewRepository(db)
 	identityService := identity.NewService(identityRepo, cfg)
 	identityCtrl := identity.NewController(identityService)
 
-	// 5. Setup Gin Router
+	storageService := documents.NewStorageService(db, cfg)
+	storageCtrl := documents.NewStorageController(storageService)
+
+	policyRepo := system.NewPolicyRepository(db)
+	policyService := system.NewPolicyService(policyRepo, rdb)
+	policyCtrl := system.NewPolicyController(policyService)
+
+	auditService := system.NewAuditService(db)
+	auditCtrl := system.NewAuditController(auditService)
+
+	settingsRepo := system.NewSettingsRepository(db)
+	settingsService := system.NewSettingsService(settingsRepo, rdb)
+	settingsCtrl := system.NewSettingsController(settingsService)
+
+	sseCtrl := system.NewSSEController(cfg, eventBus)
+
+	// 6. Setup Gin Router
 	r := gin.New()
 	r.Use(gin.Logger())
 	r.Use(middleware.Recovery())
@@ -69,7 +96,7 @@ func main() {
 		c.Next()
 	})
 
-	// 6. System Health Probes
+	// 7. System Health Probes
 	r.GET("/health/liveness", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "UP",
@@ -110,8 +137,9 @@ func main() {
 		})
 	})
 
-	// 7. API v1 Routing
+	// 8. API v1 Routing
 	apiV1 := r.Group("/api/v1")
+	apiV1.Use(middleware.GeneralRateLimiter(rdb))
 	{
 		apiV1.GET("/ping", func(c *gin.Context) {
 			response.Success(c, http.StatusOK, "DCISP API Gateway v1.0 Siap", gin.H{
@@ -119,23 +147,60 @@ func main() {
 			})
 		})
 
+		// Real-time Server-Sent Events (SSE) Stream
+		apiV1.GET("/events/stream", sseCtrl.StreamEvents)
+
 		// Identity & Authentication Routes
 		authRoutes := apiV1.Group("/auth")
+		authRoutes.Use(middleware.AuthRateLimiter(rdb))
 		{
 			authRoutes.POST("/login", identityCtrl.Login)
 			authRoutes.POST("/refresh", identityCtrl.RefreshToken)
 
-			// Protected routes
-			protected := authRoutes.Group("")
-			protected.Use(middleware.AuthJWT(cfg))
+			protectedAuth := authRoutes.Group("")
+			protectedAuth.Use(middleware.AuthJWT(cfg))
 			{
-				protected.GET("/me", identityCtrl.GetMe)
-				protected.GET("/roles", middleware.RequirePermission(db, rdb, "system.roles", "view", "SYSTEM"), identityCtrl.GetRoles)
+				protectedAuth.GET("/me", identityCtrl.GetMe)
+				protectedAuth.GET("/roles", middleware.RequirePermission(db, rdb, "system.roles", "view", "SYSTEM"), identityCtrl.GetRoles)
 			}
+		}
+
+		// Cloudflare R2 Storage Routes (FR-044)
+		storageRoutes := apiV1.Group("/storage")
+		storageRoutes.Use(middleware.AuthJWT(cfg))
+		{
+			storageRoutes.POST("/presigned-upload", storageCtrl.PresignedUpload)
+			storageRoutes.GET("/files/:id", storageCtrl.GetMetadata)
+			storageRoutes.GET("/files/:id/download-url", storageCtrl.GetDownloadURL)
+		}
+
+		// Unified Policy Engine Routes (FR-045)
+		policyRoutes := apiV1.Group("/policies")
+		policyRoutes.Use(middleware.AuthJWT(cfg))
+		{
+			policyRoutes.POST("", middleware.RequirePermission(db, rdb, "system.policies", "create", "SYSTEM"), policyCtrl.Create)
+			policyRoutes.GET("", middleware.RequirePermission(db, rdb, "system.policies", "view", "SYSTEM"), policyCtrl.List)
+			policyRoutes.GET("/:id", middleware.RequirePermission(db, rdb, "system.policies", "view", "SYSTEM"), policyCtrl.GetByID)
+			policyRoutes.PUT("/:id", middleware.RequirePermission(db, rdb, "system.policies", "update", "SYSTEM"), policyCtrl.Update)
+			policyRoutes.DELETE("/:id", middleware.RequirePermission(db, rdb, "system.policies", "delete", "SYSTEM"), policyCtrl.Delete)
+			policyRoutes.POST("/evaluate", middleware.RequirePermission(db, rdb, "system.policies", "evaluate", "SYSTEM"), policyCtrl.Evaluate)
+		}
+
+		// Centralized System Settings & Audit Logs (FR-047, FR-048)
+		systemRoutes := apiV1.Group("/system")
+		systemRoutes.Use(middleware.AuthJWT(cfg))
+		{
+			systemRoutes.GET("/audit-logs", middleware.RequirePermission(db, rdb, "system.audit_logs", "view", "SYSTEM"), auditCtrl.List)
+			systemRoutes.GET("/audit-logs/:id", middleware.RequirePermission(db, rdb, "system.audit_logs", "view", "SYSTEM"), auditCtrl.GetByID)
+
+			systemRoutes.POST("/settings", middleware.RequirePermission(db, rdb, "system.settings", "create", "SYSTEM"), settingsCtrl.SetSetting)
+			systemRoutes.GET("/settings", middleware.RequirePermission(db, rdb, "system.settings", "view", "SYSTEM"), settingsCtrl.ListSettings)
+			systemRoutes.GET("/settings/:key", middleware.RequirePermission(db, rdb, "system.settings", "view", "SYSTEM"), settingsCtrl.GetSetting)
+			systemRoutes.DELETE("/settings/:key", middleware.RequirePermission(db, rdb, "system.settings", "delete", "SYSTEM"), settingsCtrl.DeleteSetting)
 		}
 	}
 
-	// 8. Graceful Server Start
+	// 9. Graceful Server Start
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      r,
@@ -164,7 +229,8 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	// Ensure all asynchronous audit log events are flushed to database
+	// Shutdown Asynq worker pool and audit logger
+	workerPool.Shutdown()
 	middleware.CloseAuditWorker()
 
 	log.Println("Server exiting successfully")

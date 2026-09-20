@@ -23,6 +23,11 @@ type Config struct {
 	JWTSecret                string
 	JWTAccessDurationMinutes int
 	JWTRefreshDurationDays   int
+	R2AccountID              string
+	R2AccessKeyID            string
+	R2SecretAccessKey        string
+	R2BucketName             string
+	R2PublicURL              string
 }
 
 // Memuat seluruh konfigurasi aplikasi dari environment variable dan memvalidasi konfigurasi wajib.
@@ -51,6 +56,11 @@ func LoadConfig() (*Config, error) {
 		JWTSecret:                jwtSecret,
 		JWTAccessDurationMinutes: getEnvAsInt("JWT_ACCESS_DURATION_MINUTES", 15),
 		JWTRefreshDurationDays:   getEnvAsInt("JWT_REFRESH_DURATION_DAYS", 7),
+		R2AccountID:              getEnv("R2_ACCOUNT_ID", "local_dev_account"),
+		R2AccessKeyID:            getEnv("R2_ACCESS_KEY_ID", "local_dev_key"),
+		R2SecretAccessKey:        getEnv("R2_SECRET_ACCESS_KEY", "local_dev_secret"),
+		R2BucketName:             getEnv("R2_BUCKET_NAME", "dcisp-vault"),
+		R2PublicURL:              getEnv("R2_PUBLIC_URL", "https://pub-r2.dcisp.internal"),
 	}, nil
 }
 
