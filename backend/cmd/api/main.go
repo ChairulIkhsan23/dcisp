@@ -16,6 +16,7 @@ import (
 	"dcisp/backend/internal/middleware"
 	"dcisp/backend/internal/modules/attendance"
 	"dcisp/backend/internal/modules/documents"
+	"dcisp/backend/internal/modules/finance"
 	"dcisp/backend/internal/modules/identity"
 	"dcisp/backend/internal/modules/people"
 	"dcisp/backend/internal/modules/people/institutions"
@@ -98,6 +99,12 @@ func main() {
 	performanceRepo := performance.NewRepository(db)
 	performanceService := performance.NewService(performanceRepo, db, auditService, eventBus)
 	performanceCtrl := performance.NewController(performanceService)
+
+	financeRepo := finance.NewRepository(db)
+	financeService := finance.NewService(financeRepo, db, auditService, eventBus)
+	financeService.SetContributionSource(finance.NewProjectsContributionAdapter(projectsRepo, peopleRepo, db))
+	financeService.SetXPProvider(finance.NewPerformanceXPAdapter(performanceService))
+	financeCtrl := finance.NewController(financeService)
 
 	policyRepo := system.NewPolicyRepository(db)
 	policyService := system.NewPolicyService(policyRepo, rdb)
@@ -384,6 +391,44 @@ func main() {
 
 			// Skill Growth Matrix (FR-030, T-061)
 			performanceRoutes.GET("/my-skill-growth", performanceCtrl.GetMySkillGrowth)
+		}
+
+		// Finance & Compensation Routes (Domain 7: FR-031 s/d FR-039)
+		financeRoutes := apiV1.Group("/finance")
+		financeRoutes.Use(middleware.AuthJWT(cfg))
+		{
+			// Personal Wallet (FR-035, T-063)
+			financeRoutes.GET("/wallets/me", financeCtrl.GetMyWallet)
+			financeRoutes.GET("/wallets/me/transactions", financeCtrl.ListMyTransactions)
+			financeRoutes.GET("/wallets/:user_id", middleware.RequirePermission(db, rdb, "finance.wallets", "view", "FINANCIAL_DATA"), financeCtrl.GetUserWallet)
+
+			// Financial Ledger (FR-037, T-064)
+			financeRoutes.GET("/ledger", middleware.RequirePermission(db, rdb, "finance.ledger", "view", "FINANCIAL_DATA"), financeCtrl.ListLedger)
+
+			// Deduction & Tax Rules (FR-034, T-062)
+			financeRoutes.GET("/tax-rules", middleware.RequirePermission(db, rdb, "finance.tax_rules", "view", "FINANCIAL_DATA"), financeCtrl.ListTaxRules)
+			financeRoutes.POST("/tax-rules", middleware.RequirePermission(db, rdb, "finance.tax_rules", "create", "FINANCIAL_DATA"), financeCtrl.CreateTaxRule)
+
+			// Bounty Distribution & Flow Orchestration (FR-032, FR-039, T-065, T-066)
+			financeRoutes.POST("/bounty/distribute", middleware.RequirePermission(db, rdb, "finance.bounty", "distribute", "FINANCIAL_DATA"), financeCtrl.DistributeBounty)
+
+			// Batch Funds (FR-036, T-068)
+			financeRoutes.GET("/batch-funds", financeCtrl.ListBatchFunds)
+			financeRoutes.GET("/batch-funds/:batch_id", financeCtrl.GetBatchFund)
+
+			// Payout Engine (FR-038, T-070)
+			financeRoutes.POST("/payouts", financeCtrl.RequestPayout)
+			financeRoutes.GET("/payouts/me", financeCtrl.ListMyPayouts)
+			financeRoutes.GET("/payouts", middleware.RequirePermission(db, rdb, "finance.payouts", "view", "FINANCIAL_DATA"), financeCtrl.ListAllPayouts)
+			financeRoutes.PATCH("/payouts/:id/review", middleware.RequirePermission(db, rdb, "finance.payouts", "review", "FINANCIAL_DATA"), financeCtrl.ReviewPayout)
+
+			// Rank Rewards & Claims (FR-031, FR-033, T-067, T-069)
+			financeRoutes.GET("/rewards", financeCtrl.ListRewards)
+			financeRoutes.POST("/rewards", middleware.RequirePermission(db, rdb, "finance.rewards", "create", "FINANCIAL_DATA"), financeCtrl.CreateReward)
+			financeRoutes.POST("/rewards/issue-rank", middleware.RequirePermission(db, rdb, "finance.rewards", "issue", "FINANCIAL_DATA"), financeCtrl.IssueRankRewards)
+			financeRoutes.GET("/reward-claims/me", financeCtrl.ListMyClaims)
+			financeRoutes.POST("/reward-claims/:id/claim", financeCtrl.ClaimReward)
+			financeRoutes.PATCH("/reward-claims/:id/process", middleware.RequirePermission(db, rdb, "finance.rewards", "process", "FINANCIAL_DATA"), financeCtrl.ProcessClaim)
 		}
 	}
 
