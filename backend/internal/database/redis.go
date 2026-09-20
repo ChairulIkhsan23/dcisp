@@ -28,7 +28,7 @@ func NewRedisClient(cfg *config.Config) (*RedisClient, error) {
 	defer cancel()
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("unable to ping redis at %s: %w", addr, err)
+		return nil, fmt.Errorf("gagal melakukan ping ke redis di %s: %w", addr, err)
 	}
 
 	log.Printf("Connected to Redis successfully (%s)", addr)

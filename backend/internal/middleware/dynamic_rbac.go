@@ -15,14 +15,14 @@ func RequirePermission(db *database.PostgresDB, resource, action string, require
 	return func(c *gin.Context) {
 		userIDVal, exists := c.Get(ContextUserIDKey)
 		if !exists {
-			response.Unauthorized(c, "Unauthenticated user context")
+			response.Unauthorized(c, "Konteks pengguna tidak terautentikasi")
 			c.Abort()
 			return
 		}
 
 		userID, ok := userIDVal.(uuid.UUID)
 		if !ok {
-			response.Unauthorized(c, "Invalid user identifier")
+			response.Unauthorized(c, "Pengenal pengguna tidak valid")
 			c.Abort()
 			return
 		}
@@ -33,7 +33,7 @@ func RequirePermission(db *database.PostgresDB, resource, action string, require
 		// Enforcement BR-002: Scanner Operator Isolation
 		if strings.EqualFold(userRole, "SCANNER_OPERATOR") {
 			if !strings.HasPrefix(resource, "attendance.scanner") {
-				response.Forbidden(c, "Access Denied: Scanner Operator role is strictly isolated to attendance scanner operations (BR-002)")
+				response.Forbidden(c, "Akses Ditolak: Peran Scanner Operator dibatasi secara ketat hanya untuk operasi pemindai presensi (BR-002)")
 				c.Abort()
 				return
 			}
@@ -49,7 +49,7 @@ func RequirePermission(db *database.PostgresDB, resource, action string, require
 		`
 		rows, err := db.Pool.Query(ctx, query, userID)
 		if err != nil {
-			response.InternalError(c, "Failed to evaluate authorization permissions", err.Error())
+			response.InternalError(c, "Gagal mengevaluasi izin otorisasi", err.Error())
 			c.Abort()
 			return
 		}
@@ -88,7 +88,7 @@ func RequirePermission(db *database.PostgresDB, resource, action string, require
 		}
 
 		if !hasAccess {
-			response.Forbidden(c, "Access Denied: You do not have the required permission for this resource/action")
+			response.Forbidden(c, "Akses Ditolak: Anda tidak memiliki izin yang diperlukan untuk sumber daya/tindakan ini")
 			c.Abort()
 			return
 		}

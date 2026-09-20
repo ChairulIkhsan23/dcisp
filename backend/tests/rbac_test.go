@@ -52,12 +52,12 @@ func TestScannerOperatorIsolation(t *testing.T) {
 
 	// Protected endpoint that requires finance/project access
 	r.GET("/api/v1/finance/ledger", middleware.RequirePermission(db, "finance.ledger", "view", "FINANCIAL_DATA"), func(c *gin.Context) {
-		response.Success(c, http.StatusOK, "Ledger accessed", nil)
+		response.Success(c, http.StatusOK, "Buku besar berhasil diakses", nil)
 	})
 
 	// Protected endpoint that scanner operator IS allowed to access
 	r.GET("/api/v1/attendance/scanner/view", middleware.RequirePermission(db, "attendance.scanner", "view", "SCANNER_ONLY"), func(c *gin.Context) {
-		response.Success(c, http.StatusOK, "Scanner view accessed", nil)
+		response.Success(c, http.StatusOK, "Tampilan pemindai berhasil diakses", nil)
 	})
 
 	tokens, err := utils.GenerateTokenPair(cfg.JWTSecret, 15, 7, testScannerUserID, testEmail, "SCANNER_OPERATOR", []string{"SCANNER_ONLY"})

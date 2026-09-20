@@ -25,20 +25,20 @@
 
 ### 2.2 Error Handling & Wrapping
 * Never ignore errors (`_ = doSomething()` is prohibited for fallible operations).
-* Always wrap errors with context using `fmt.Errorf("...: %w", err)`:
+* Always wrap errors with context using `fmt.Errorf("...: %w", err)` dalam bahasa Indonesia:
   ```go
   // GOOD
   user, err := r.repo.FindByID(ctx, id)
   if err != nil {
-      return nil, fmt.Errorf("failed to retrieve user profile: %w", err)
+      return nil, fmt.Errorf("gagal mengambil profil pengguna: %w", err)
   }
 
   // BAD
   if err != nil {
-      return nil, err // Loses contextual information
+      return nil, err // Kehilangan informasi kontekstual
   }
   ```
-* Define sentinel errors for predictable domain outcomes (e.g., `ErrUserNotFound`, `ErrCardUnregistered`, `ErrQuotaExceeded`).
+* Define sentinel errors in Bahasa Indonesia for predictable domain outcomes (e.g., `ErrUserNotFound = errors.New("pengguna tidak ditemukan")`, `ErrInvalidCredentials = errors.New("email atau kata sandi tidak valid")`, `ErrCardUnregistered = errors.New("kartu belum terdaftar")`).
 
 ### 2.3 Structs & Interface Design
 * Define interfaces at the consumer level, not the producer level.
@@ -101,6 +101,59 @@
   - Red: `#E13447` (Combat Red, Damage/Penalty)
   - Ink Black: `#000000` (Borders & Hard Drop Shadows)
 * Never apply soft blur shadows (`shadow-md`, `shadow-lg` from standard Tailwind); always use hard offset shadows (`shadow-neo-sm`, `shadow-neo-md`, `shadow-neo-lg`).
+
+---
+
+## 4. Standar Pesan & Respons API (Wajib Bahasa Indonesia)
+
+Semua pesan yang dikembalikan oleh backend kepada klien (field `message` pada respons sukses maupun error, pesan validasi, pesan otentikasi/otorisasi, serta pesan error sentinel) **wajib menggunakan bahasa Indonesia** yang baku, jelas, informatif, dan profesional.
+
+### 4.1 Format Standar Pesan Respons
+1. **Respons Sukses (2xx):**
+   - Format: `[Objek/Aksi] + [status berhasil]`
+   - Contoh:
+     - `"Login berhasil"`
+     - `"Token berhasil diperbarui"`
+     - `"Profil pengguna berhasil diambil"`
+     - `"Daftar peran berhasil diambil"`
+     - `"Presensi masuk berhasil dicatat tepat waktu"`
+     - `"Permintaan lembur berhasil diajukan"`
+
+2. **Respons Validasi & Input Klien (400 Bad Request):**
+   - Format: Menjelaskan bagian input atau muatan data yang tidak valid secara spesifik.
+   - Contoh:
+     - `"Payload permintaan login tidak valid"`
+     - `"Payload refresh token tidak valid"`
+     - `"Format tanggal tidak sesuai (gunakan YYYY-MM-DD)"`
+
+3. **Respons Autentikasi & Otorisasi (401 Unauthorized / 403 Forbidden):**
+   - Format: Menjelaskan alasan kegagalan autentikasi atau pembatasan hak akses.
+   - Contoh:
+     - `"Email atau kata sandi tidak valid"`
+     - `"Header otorisasi tidak ditemukan"`
+     - `"Format header otorisasi tidak valid. Format yang diharapkan: 'Bearer <token>'"`
+     - `"Token akses tidak valid atau telah kedaluwarsa"`
+     - `"Pengguna tidak terautentikasi"`
+     - `"Akses Ditolak: Anda tidak memiliki izin yang diperlukan untuk sumber daya/tindakan ini"`
+     - `"Akses Ditolak: Peran Scanner Operator dibatasi secara ketat hanya untuk operasi pemindai presensi (BR-002)"`
+
+4. **Respons Sumber Daya Tidak Ditemukan (404 Not Found):**
+   - Contoh:
+     - `"Profil pengguna tidak ditemukan"`
+     - `"Data proyek tidak ditemukan"`
+
+5. **Respons Kesalahan Server Internal (500 Internal Server Error):**
+   - Format: Memberikan pesan umum yang aman tanpa membocorkan rincian sensitif stack trace ke pengguna.
+   - Contoh:
+     - `"Terjadi kesalahan internal server yang tidak terduga"`
+     - `"Gagal mengautentikasi pengguna"`
+     - `"Gagal mengambil profil pengguna"`
+     - `"Gagal mengevaluasi izin otorisasi"`
+
+### 4.2 Checklist Pesan & Respons
+- [x] Menggunakan bahasa Indonesia yang baku, sopan, dan konsisten.
+- [x] Tidak mencampur bahasa Inggris dan Indonesia untuk pesan antarmuka/klien (kecuali istilah teknis baku seperti Bearer, Token, JSON, QR, NFC).
+- [x] Pesan error memberikan panduan atau konteks yang jelas tentang apa yang salah dan apa yang diharapkan.
 
 ---
 

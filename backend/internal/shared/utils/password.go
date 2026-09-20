@@ -31,7 +31,7 @@ var DefaultArgonParams = &ArgonParams{
 func HashPassword(password string) (string, error) {
 	salt := make([]byte, DefaultArgonParams.SaltLength)
 	if _, err := rand.Read(salt); err != nil {
-		return "", fmt.Errorf("failed to generate random salt: %w", err)
+		return "", fmt.Errorf("gagal menghasilkan salt acak: %w", err)
 	}
 
 	hash := argon2.IDKey(
@@ -62,32 +62,32 @@ func HashPassword(password string) (string, error) {
 func VerifyPassword(password, encodedHash string) (bool, error) {
 	parts := strings.Split(encodedHash, "$")
 	if len(parts) != 6 {
-		return false, errors.New("invalid encoded hash format")
+		return false, errors.New("format hash terenkripsi tidak valid")
 	}
 
 	if parts[1] != "argon2id" {
-		return false, errors.New("unsupported argon2 variant")
+		return false, errors.New("varian argon2 tidak didukung")
 	}
 
 	var version int
 	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil {
-		return false, fmt.Errorf("failed to parse argon2 version: %w", err)
+		return false, fmt.Errorf("gagal mem-parsing versi argon2: %w", err)
 	}
 
 	var memory, iterations uint32
 	var parallelism uint8
 	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &memory, &iterations, &parallelism); err != nil {
-		return false, fmt.Errorf("failed to parse argon2 params: %w", err)
+		return false, fmt.Errorf("gagal mem-parsing parameter argon2: %w", err)
 	}
 
 	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil {
-		return false, fmt.Errorf("failed to decode salt: %w", err)
+		return false, fmt.Errorf("gagal mendekode salt: %w", err)
 	}
 
 	expectedHash, err := base64.RawStdEncoding.DecodeString(parts[5])
 	if err != nil {
-		return false, fmt.Errorf("failed to decode hash: %w", err)
+		return false, fmt.Errorf("gagal mendekode hash: %w", err)
 	}
 
 	actualHash := argon2.IDKey(

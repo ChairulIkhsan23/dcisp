@@ -48,7 +48,7 @@ func GenerateTokenPair(secret string, accessMinutes, refreshDays int, userID uui
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
 	signedAccessToken, err := accessToken.SignedString([]byte(secret))
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign access token: %w", err)
+		return nil, fmt.Errorf("gagal menandatangani token akses: %w", err)
 	}
 
 	// 2. Refresh Token
@@ -62,7 +62,7 @@ func GenerateTokenPair(secret string, accessMinutes, refreshDays int, userID uui
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
 	signedRefreshToken, err := refreshToken.SignedString([]byte(secret))
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign refresh token: %w", err)
+		return nil, fmt.Errorf("gagal menandatangani refresh token: %w", err)
 	}
 
 	return &TokenPair{
@@ -77,7 +77,7 @@ func GenerateTokenPair(secret string, accessMinutes, refreshDays int, userID uui
 func ValidateToken(secret, tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			return nil, fmt.Errorf("metode penandatanganan tidak diharapkan: %v", token.Header["alg"])
 		}
 		return []byte(secret), nil
 	})
@@ -93,10 +93,10 @@ func ValidateToken(secret, tokenString string) (*JWTClaims, error) {
 			}
 		}
 		if claims.UserID == uuid.Nil {
-			return nil, errors.New("invalid token payload: user_id missing")
+			return nil, errors.New("payload token tidak valid: user_id tidak ditemukan")
 		}
 		return claims, nil
 	}
 
-	return nil, errors.New("invalid token")
+	return nil, errors.New("token tidak valid")
 }

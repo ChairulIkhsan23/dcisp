@@ -21,21 +21,21 @@ func AuthJWT(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			response.Unauthorized(c, "Authorization header missing")
+			response.Unauthorized(c, "Header otorisasi tidak ditemukan")
 			c.Abort()
 			return
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			response.Unauthorized(c, "Invalid authorization header format. Expected 'Bearer <token>'")
+			response.Unauthorized(c, "Format header otorisasi tidak valid. Format yang diharapkan: 'Bearer <token>'")
 			c.Abort()
 			return
 		}
 
 		claims, err := utils.ValidateToken(cfg.JWTSecret, parts[1])
 		if err != nil {
-			response.Unauthorized(c, "Invalid or expired access token")
+			response.Unauthorized(c, "Token akses tidak valid atau telah kedaluwarsa")
 			c.Abort()
 			return
 		}

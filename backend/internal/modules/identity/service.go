@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	ErrInvalidCredentials = errors.New("invalid email or password")
-	ErrUserNotFound       = errors.New("user not found")
-	ErrAccountInactive    = errors.New("account is not active")
+	ErrInvalidCredentials = errors.New("email atau kata sandi tidak valid")
+	ErrUserNotFound       = errors.New("pengguna tidak ditemukan")
+	ErrAccountInactive    = errors.New("akun tidak aktif")
 )
 
 type Service struct {
@@ -43,7 +43,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*utils.Tok
 
 	role, scopes, err := s.repo.GetUserRoleAndScopes(ctx, user.ID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to retrieve user role: %w", err)
+		return nil, nil, fmt.Errorf("gagal mengambil peran pengguna: %w", err)
 	}
 
 	permissions, err := s.repo.GetUserPermissions(ctx, user.ID)
@@ -61,7 +61,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*utils.Tok
 		scopes,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to generate token pair: %w", err)
+		return nil, nil, fmt.Errorf("gagal membuat pasangan token: %w", err)
 	}
 
 	profile := &UserProfileResponse{
@@ -112,12 +112,12 @@ func (s *Service) GetUserProfile(ctx context.Context, userID uuid.UUID) (*UserPr
 func (s *Service) RefreshToken(ctx context.Context, refreshTokenString string) (*utils.TokenPair, error) {
 	claims, err := utils.ValidateToken(s.cfg.JWTSecret, refreshTokenString)
 	if err != nil {
-		return nil, errors.New("invalid or expired refresh token")
+		return nil, errors.New("refresh token tidak valid atau telah kedaluwarsa")
 	}
 
 	user, err := s.repo.FindByID(ctx, claims.UserID)
 	if err != nil || user == nil {
-		return nil, errors.New("user not found or inactive")
+		return nil, errors.New("pengguna tidak ditemukan atau tidak aktif")
 	}
 
 	role, scopes, err := s.repo.GetUserRoleAndScopes(ctx, user.ID)

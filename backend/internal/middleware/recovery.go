@@ -14,7 +14,7 @@ func Recovery() gin.HandlerFunc {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Printf("[PANIC RECOVERED] %v\nStack: %s", err, string(debug.Stack()))
-				response.InternalError(c, "An unexpected internal server error occurred")
+				response.InternalError(c, "Terjadi kesalahan internal server yang tidak terduga")
 				c.Abort()
 			}
 		}()

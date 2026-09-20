@@ -34,7 +34,7 @@ func (r *Repository) FindByEmail(ctx context.Context, email string) (*User, erro
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("error finding user by email: %w", err)
+		return nil, fmt.Errorf("gagal mencari pengguna berdasarkan email: %w", err)
 	}
 
 	return &u, nil
@@ -55,7 +55,7 @@ func (r *Repository) FindByID(ctx context.Context, id uuid.UUID) (*User, error) 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("error finding user by id: %w", err)
+		return nil, fmt.Errorf("gagal mencari pengguna berdasarkan id: %w", err)
 	}
 
 	return &u, nil
@@ -77,7 +77,7 @@ func (r *Repository) GetUserRoleAndScopes(ctx context.Context, userID uuid.UUID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "GUEST", []string{"OWN_DATA"}, nil
 		}
-		return "", nil, fmt.Errorf("error querying user role: %w", err)
+		return "", nil, fmt.Errorf("gagal mengueri peran pengguna: %w", err)
 	}
 
 	return roleName, []string{scopeType}, nil
@@ -93,7 +93,7 @@ func (r *Repository) GetUserPermissions(ctx context.Context, userID uuid.UUID) (
 	`
 	rows, err := r.db.Pool.Query(ctx, query, userID)
 	if err != nil {
-		return nil, fmt.Errorf("error querying user permissions: %w", err)
+		return nil, fmt.Errorf("gagal mengueri izin pengguna: %w", err)
 	}
 	defer rows.Close()
 
@@ -113,7 +113,7 @@ func (r *Repository) GetAllRoles(ctx context.Context) ([]Role, error) {
 	query := `SELECT id, name, description, is_system FROM roles ORDER BY name ASC`
 	rows, err := r.db.Pool.Query(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("error querying roles: %w", err)
+		return nil, fmt.Errorf("gagal mengueri daftar peran: %w", err)
 	}
 	defer rows.Close()
 

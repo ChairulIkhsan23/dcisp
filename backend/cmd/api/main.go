@@ -108,7 +108,7 @@ func main() {
 	apiV1 := r.Group("/api/v1")
 	{
 		apiV1.GET("/ping", func(c *gin.Context) {
-			response.Success(c, http.StatusOK, "DCISP API Gateway v1.0 Ready", gin.H{
+			response.Success(c, http.StatusOK, "DCISP API Gateway v1.0 Siap", gin.H{
 				"realm": "The 8-Bit Professional Realm",
 			})
 		})
