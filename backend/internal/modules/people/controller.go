@@ -34,7 +34,7 @@ func (ctrl *Controller) CreateInstitution(c *gin.Context) {
 	inst, err := ctrl.service.CreateInstitution(c.Request.Context(), &req)
 	if err != nil {
 		log.Printf("Gagal membuat institusi: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 
@@ -87,7 +87,7 @@ func (ctrl *Controller) UpdateInstitution(c *gin.Context) {
 	inst, err := ctrl.service.UpdateInstitution(c.Request.Context(), id, &req)
 	if err != nil {
 		log.Printf("Gagal memperbarui institusi: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 
@@ -104,7 +104,7 @@ func (ctrl *Controller) DeleteInstitution(c *gin.Context) {
 
 	if err := ctrl.service.DeleteInstitution(c.Request.Context(), id); err != nil {
 		log.Printf("Gagal menghapus institusi: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 
@@ -126,7 +126,7 @@ func (ctrl *Controller) CreateBatch(c *gin.Context) {
 	batch, fund, err := ctrl.service.CreateBatch(c.Request.Context(), &req)
 	if err != nil {
 		log.Printf("Gagal membuat batch: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (ctrl *Controller) UpdateBatch(c *gin.Context) {
 	batch, err := ctrl.service.UpdateBatch(c.Request.Context(), id, &req)
 	if err != nil {
 		log.Printf("Gagal memperbarui batch: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 
@@ -208,7 +208,7 @@ func (ctrl *Controller) RegisterIntern(c *gin.Context) {
 	intern, err := ctrl.service.RegisterIntern(c.Request.Context(), &req)
 	if err != nil {
 		log.Printf("Gagal mendaftarkan peserta magang: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 
@@ -237,7 +237,7 @@ func (ctrl *Controller) ChangeInternStatus(c *gin.Context) {
 	intern, err := ctrl.service.ChangeInternStatus(c.Request.Context(), id, req.Status, reason)
 	if err != nil {
 		log.Printf("Gagal mengubah status peserta magang: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 
@@ -338,7 +338,7 @@ func (ctrl *Controller) AssignMentor(c *gin.Context) {
 	intern, err := ctrl.service.AssignMentor(c.Request.Context(), id, req.MentorID)
 	if err != nil {
 		log.Printf("Gagal menetapkan pembimbing: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 
@@ -362,7 +362,7 @@ func (ctrl *Controller) PlotBatch(c *gin.Context) {
 	intern, err := ctrl.service.PlotBatch(c.Request.Context(), id, req.BatchID)
 	if err != nil {
 		log.Printf("Gagal plotting batch: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 
@@ -428,7 +428,7 @@ func (ctrl *Controller) CreateSkill(c *gin.Context) {
 	skill, err := ctrl.service.CreateSkill(c.Request.Context(), &req)
 	if err != nil {
 		log.Printf("Gagal membuat master skill: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 
@@ -466,7 +466,7 @@ func (ctrl *Controller) AssignUserSkill(c *gin.Context) {
 	us, err := ctrl.service.AssignUserSkill(c.Request.Context(), userID, &req)
 	if err != nil {
 		log.Printf("Gagal menetapkan skill pada pengguna: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 
@@ -507,7 +507,7 @@ func (ctrl *Controller) DeleteUserSkill(c *gin.Context) {
 
 	if err := ctrl.service.DeleteUserSkill(c.Request.Context(), userID, skillID); err != nil {
 		log.Printf("Gagal menghapus skill pengguna: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data personalia tidak dapat diproses", err)
 		return
 	}
 

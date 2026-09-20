@@ -75,7 +75,7 @@ func (ctrl *Controller) MutateXP(c *gin.Context) {
 	txRecord, err := ctrl.service.RecordXPMutation(c.Request.Context(), &req)
 	if err != nil {
 		log.Printf("Gagal memproses mutasi XP: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data performa tidak dapat diproses", err)
 		return
 	}
 
@@ -137,7 +137,7 @@ func (ctrl *Controller) CreateEvaluation(c *gin.Context) {
 	eval, err := ctrl.service.CreateEvaluation(c.Request.Context(), evaluatorID, &req)
 	if err != nil {
 		log.Printf("Gagal membuat evaluasi performa: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data performa tidak dapat diproses", err)
 		return
 	}
 
@@ -154,7 +154,7 @@ func (ctrl *Controller) GetEvaluationByID(c *gin.Context) {
 
 	eval, err := ctrl.service.GetEvaluationByID(c.Request.Context(), id)
 	if err != nil {
-		response.NotFound(c, err.Error())
+		response.SafeNotFound(c, "Data tidak ditemukan", err)
 		return
 	}
 
@@ -174,7 +174,7 @@ func (ctrl *Controller) DetermineTopPerformer(c *gin.Context) {
 	res, err := ctrl.service.DetermineTopPerformer(c.Request.Context(), batchID, periodType)
 	if err != nil {
 		log.Printf("Gagal menetapkan top performer: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data performa tidak dapat diproses", err)
 		return
 	}
 
@@ -195,7 +195,7 @@ func (ctrl *Controller) CreateAchievement(c *gin.Context) {
 
 	ach, err := ctrl.service.CreateAchievement(c.Request.Context(), &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data performa tidak dapat diproses", err)
 		return
 	}
 
@@ -239,7 +239,7 @@ func (ctrl *Controller) UnlockAchievement(c *gin.Context) {
 
 	isNew, err := ctrl.service.UnlockAchievement(c.Request.Context(), userID, code)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan data performa tidak dapat diproses", err)
 		return
 	}
 

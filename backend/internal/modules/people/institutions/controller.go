@@ -31,7 +31,7 @@ func (ctrl *Controller) SearchExternalInstitutions(c *gin.Context) {
 	result, err := ctrl.service.SearchExternalInstitutions(c.Request.Context(), query, source, province, regency, page, perPage)
 	if err != nil {
 		log.Printf("Gagal mencari institusi eksternal: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan institusi tidak dapat diproses", err)
 		return
 	}
 
@@ -50,7 +50,7 @@ func (ctrl *Controller) GetExternalInstitutionDetail(c *gin.Context) {
 	detail, err := ctrl.service.GetExternalInstitutionDetail(c.Request.Context(), source, externalID)
 	if err != nil {
 		log.Printf("Gagal mengambil detail institusi eksternal: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan institusi tidak dapat diproses", err)
 		return
 	}
 
@@ -68,7 +68,7 @@ func (ctrl *Controller) ImportExternalInstitution(c *gin.Context) {
 	inst, isNew, err := ctrl.service.ImportExternalInstitution(c.Request.Context(), &req)
 	if err != nil {
 		log.Printf("Gagal mengimpor institusi eksternal: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan institusi tidak dapat diproses", err)
 		return
 	}
 

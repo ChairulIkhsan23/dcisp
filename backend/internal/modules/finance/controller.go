@@ -133,7 +133,7 @@ func (ctrl *Controller) CreateTaxRule(c *gin.Context) {
 	rule, err := ctrl.service.CreateTaxRule(c.Request.Context(), &req)
 	if err != nil {
 		log.Printf("Gagal membuat aturan deduksi: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan finansial tidak dapat diproses", err)
 		return
 	}
 
@@ -155,7 +155,7 @@ func (ctrl *Controller) DistributeBounty(c *gin.Context) {
 	resp, err := ctrl.service.DistributeBounty(c.Request.Context(), req.ProjectID)
 	if err != nil {
 		log.Printf("Gagal mendistribusikan bounty: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan finansial tidak dapat diproses", err)
 		return
 	}
 
@@ -187,7 +187,7 @@ func (ctrl *Controller) GetBatchFund(c *gin.Context) {
 
 	fund, err := ctrl.service.GetBatchFund(c.Request.Context(), batchID)
 	if err != nil {
-		response.NotFound(c, err.Error())
+		response.SafeNotFound(c, "Data tidak ditemukan", err)
 		return
 	}
 
@@ -217,7 +217,7 @@ func (ctrl *Controller) RequestPayout(c *gin.Context) {
 
 	payout, err := ctrl.service.RequestPayout(c.Request.Context(), userID, &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan finansial tidak dapat diproses", err)
 		return
 	}
 
@@ -248,7 +248,7 @@ func (ctrl *Controller) ReviewPayout(c *gin.Context) {
 
 	payout, err := ctrl.service.ReviewPayout(c.Request.Context(), payoutID, &req, reviewerID)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan finansial tidak dapat diproses", err)
 		return
 	}
 
@@ -335,7 +335,7 @@ func (ctrl *Controller) CreateReward(c *gin.Context) {
 	}
 
 	if err := ctrl.service.repo.CreateReward(c.Request.Context(), reward); err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan finansial tidak dapat diproses", err)
 		return
 	}
 
@@ -352,7 +352,7 @@ func (ctrl *Controller) IssueRankRewards(c *gin.Context) {
 
 	claims, err := ctrl.service.IssueRankRewards(c.Request.Context(), req.UserID, req.RankID)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan finansial tidak dapat diproses", err)
 		return
 	}
 
@@ -375,7 +375,7 @@ func (ctrl *Controller) ClaimReward(c *gin.Context) {
 
 	claim, err := ctrl.service.ClaimReward(c.Request.Context(), claimID, userID, &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan finansial tidak dapat diproses", err)
 		return
 	}
 
@@ -398,7 +398,7 @@ func (ctrl *Controller) ProcessClaim(c *gin.Context) {
 
 	claim, err := ctrl.service.ProcessClaim(c.Request.Context(), claimID, &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan finansial tidak dapat diproses", err)
 		return
 	}
 

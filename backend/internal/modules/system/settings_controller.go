@@ -28,7 +28,7 @@ func (ctrl *SettingsController) SetSetting(c *gin.Context) {
 	setting, err := ctrl.service.SetSetting(c.Request.Context(), &req)
 	if err != nil {
 		log.Printf("Gagal menetapkan pengaturan sistem: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan pengaturan tidak dapat diproses", err)
 		return
 	}
 
@@ -74,7 +74,7 @@ func (ctrl *SettingsController) DeleteSetting(c *gin.Context) {
 
 	if err := ctrl.service.DeleteSetting(c.Request.Context(), key); err != nil {
 		log.Printf("Gagal menghapus pengaturan sistem: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan pengaturan tidak dapat diproses", err)
 		return
 	}
 

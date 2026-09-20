@@ -30,7 +30,7 @@ func (ctrl *PolicyController) Create(c *gin.Context) {
 	p, err := ctrl.service.CreatePolicy(c.Request.Context(), &req)
 	if err != nil {
 		log.Printf("Gagal membuat kebijakan: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan kebijakan tidak dapat diproses", err)
 		return
 	}
 
@@ -103,7 +103,7 @@ func (ctrl *PolicyController) Update(c *gin.Context) {
 	p, err := ctrl.service.UpdatePolicy(c.Request.Context(), id, &req)
 	if err != nil {
 		log.Printf("Gagal memperbarui kebijakan: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan kebijakan tidak dapat diproses", err)
 		return
 	}
 
@@ -121,7 +121,7 @@ func (ctrl *PolicyController) Delete(c *gin.Context) {
 
 	if err := ctrl.service.DeletePolicy(c.Request.Context(), id); err != nil {
 		log.Printf("Gagal menghapus kebijakan: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan kebijakan tidak dapat diproses", err)
 		return
 	}
 

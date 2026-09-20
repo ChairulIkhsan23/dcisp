@@ -30,7 +30,7 @@ func (ctrl *StorageController) PresignedUpload(c *gin.Context) {
 	res, err := ctrl.service.GeneratePresignedUpload(c.Request.Context(), &req)
 	if err != nil {
 		log.Printf("Gagal menghasilkan presigned upload URL: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan berkas tidak dapat diproses", err)
 		return
 	}
 
@@ -74,7 +74,7 @@ func (ctrl *StorageController) GetDownloadURL(c *gin.Context) {
 	downloadURL, err := ctrl.service.GeneratePresignedDownload(c.Request.Context(), fileID, expiresIn)
 	if err != nil {
 		log.Printf("Gagal menghasilkan presigned download URL: %v", err)
-		response.NotFound(c, err.Error())
+		response.SafeNotFound(c, "Data tidak ditemukan", err)
 		return
 	}
 

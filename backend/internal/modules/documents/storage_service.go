@@ -44,14 +44,24 @@ func getSigningKey(secretKey, dateStamp, region, service string) []byte {
 	return kSigning
 }
 
+// Daftar tipe MIME yang diizinkan untuk unggahan berkas (SECURITY.md Section 5).
+var allowedMimeTypes = map[string]bool{
+	"image/jpeg":      true,
+	"image/png":       true,
+	"image/webp":      true,
+	"application/pdf": true,
+}
+
+// Batas ukuran berkas per partisi folder (SECURITY.md Section 5).
+const (
+	maxEvidenceBytes = 25 * 1024 * 1024
+	maxAvatarBytes   = 5 * 1024 * 1024
+	maxDownloadTTL   = 3600
+	minDownloadTTL   = 60
+)
+
 // Menghasilkan Presigned PUT URL aman untuk unggah langsung ke Cloudflare R2 dan menyimpan rekod metadatanya.
 func (s *StorageService) GeneratePresignedUpload(ctx context.Context, req *PresignedUploadRequest) (*PresignedUploadResponse, error) {
-	// Validasi ukuran berkas (Maksimal 25MB sesuai SECURITY.md)
-	const maxSizeBytes = 25 * 1024 * 1024
-	if req.SizeBytes > maxSizeBytes {
-		return nil, fmt.Errorf("ukuran berkas melebihi batas maksimal 25 MB: %d bytes", req.SizeBytes)
-	}
-
 	// Validasi folder partisi (FR-044)
 	allowedFolders := map[string]bool{
 		"task-evidence": true,
@@ -70,17 +80,44 @@ func (s *StorageService) GeneratePresignedUpload(ctx context.Context, req *Presi
 		return nil, fmt.Errorf("partisi folder tidak diizinkan: %s", req.Folder)
 	}
 
+	// Validasi ukuran berkas per partisi (5 MB untuk avatar profil, 25 MB untuk bukti/dokumen)
+	maxSizeBytes := int64(maxEvidenceBytes)
+	if cleanFolder == "profile" {
+		maxSizeBytes = int64(maxAvatarBytes)
+	}
+	if req.SizeBytes <= 0 {
+		return nil, fmt.Errorf("ukuran berkas tidak valid")
+	}
+	if req.SizeBytes > maxSizeBytes {
+		return nil, fmt.Errorf("ukuran berkas melebihi batas maksimal %d MB", maxSizeBytes/(1024*1024))
+	}
+
+	// Validasi tipe MIME dengan allowlist ketat (jangan percaya Content-Type klien mentah)
+	mimeType := strings.ToLower(strings.TrimSpace(strings.SplitN(req.MimeType, ";", 2)[0]))
+	if !allowedMimeTypes[mimeType] {
+		return nil, fmt.Errorf("tipe berkas tidak diizinkan (hanya JPEG, PNG, WebP, atau PDF)")
+	}
+
+	// Sanitasi nama berkas terhadap path traversal
+	if strings.ContainsAny(req.Filename, "/\\") || strings.Contains(req.Filename, "..") {
+		return nil, fmt.Errorf("nama berkas mengandung karakter path yang tidak diizinkan")
+	}
+	cleanName := path.Base(req.Filename)
+	if cleanName == "" || cleanName == "." {
+		return nil, fmt.Errorf("nama berkas tidak valid")
+	}
+
 	fileID := uuid.New()
-	ext := path.Ext(req.Filename)
+	ext := strings.ToLower(path.Ext(cleanName))
 	now := time.Now().UTC()
 	pathKey := fmt.Sprintf("%s/%s/%s%s", cleanFolder, now.Format("2006/01"), fileID.String(), ext)
 
-	// Buat rekod metadata berkas pada PostgreSQL
+	// Buat rekod metadata berkas pada PostgreSQL (hanya metadata, tanpa biner - BR-024)
 	query := `
 		INSERT INTO file_metadata (id, disk, path_key, filename, mime_type, size_bytes, metadata, created_at)
 		VALUES ($1, 'r2', $2, $3, $4, $5, '{}'::jsonb, CURRENT_TIMESTAMP)
 	`
-	_, err := s.db.Pool.Exec(ctx, query, fileID, pathKey, req.Filename, req.MimeType, req.SizeBytes)
+	_, err := s.db.Pool.Exec(ctx, query, fileID, pathKey, cleanName, mimeType, req.SizeBytes)
 	if err != nil {
 		return nil, fmt.Errorf("gagal menyimpan metadata berkas: %w", err)
 	}
@@ -111,8 +148,12 @@ func (s *StorageService) GeneratePresignedDownload(ctx context.Context, fileID u
 		return "", fmt.Errorf("gagal mengambil path berkas: %w", err)
 	}
 
-	if expiresInSeconds <= 0 {
-		expiresInSeconds = 3600 // 60 menit default
+	// Masa berlaku unduhan ditentukan server (60-3600 detik); nilai klien di-clamp agar tidak arbitrer
+	if expiresInSeconds < minDownloadTTL {
+		expiresInSeconds = maxDownloadTTL
+	}
+	if expiresInSeconds > maxDownloadTTL {
+		expiresInSeconds = maxDownloadTTL
 	}
 
 	return s.signURL("GET", pathKey, expiresInSeconds, time.Now().UTC())

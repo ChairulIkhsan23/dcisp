@@ -46,6 +46,15 @@ func TestProjectCompleteLifecycleE2E(t *testing.T) {
 		applicant2ID, fmt.Sprintf("app2_e2e_%s@dcisp.internal", applicant2ID.String()[:8]))
 	require.NoError(t, err)
 
+	// Tetapkan peran INTERN pada pelamar agar lolos evaluasi visibilitas dinamis (BR-001)
+	for _, applicantID := range []uuid.UUID{applicant1ID, applicant2ID} {
+		_, err = db.Pool.Exec(ctx, `
+			INSERT INTO user_roles (user_id, role_id, scope_id)
+			VALUES ($1, '10000000-0000-0000-0000-000000000009', '20000000-0000-0000-0000-000000000007')
+		`, applicantID)
+		require.NoError(t, err)
+	}
+
 	t.Cleanup(func() {
 		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM evidence WHERE submission_id IN (SELECT id FROM work_reports WHERE user_id IN ($1, $2))", applicant1ID, applicant2ID)
 		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM work_reports WHERE user_id IN ($1, $2)", applicant1ID, applicant2ID)
@@ -54,6 +63,7 @@ func TestProjectCompleteLifecycleE2E(t *testing.T) {
 		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM project_applications WHERE project_id IN (SELECT id FROM projects WHERE owner_id = $1)", ownerID)
 		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM project_teams WHERE project_id IN (SELECT id FROM projects WHERE owner_id = $1)", ownerID)
 		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM projects WHERE owner_id = $1", ownerID)
+		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM user_roles WHERE user_id IN ($1, $2, $3, $4)", ownerID, supervisorID, applicant1ID, applicant2ID)
 		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM users WHERE id IN ($1, $2, $3, $4)", ownerID, supervisorID, applicant1ID, applicant2ID)
 	})
 
@@ -69,9 +79,9 @@ func TestProjectCompleteLifecycleE2E(t *testing.T) {
 	require.NoError(t, err)
 
 	// 3. Pelamar 1 dan Pelamar 2 Mengajukan Lamaran
-	app1, err := service.ApplyProject(ctx, project.ID, applicant1ID, &projects.ApplyProjectRequest{CoverLetter: "Siap bekerja backend"}, "INTERN")
+	app1, err := service.ApplyProject(ctx, project.ID, applicant1ID, &projects.ApplyProjectRequest{CoverLetter: "Siap bekerja backend"})
 	require.NoError(t, err)
-	app2, err := service.ApplyProject(ctx, project.ID, applicant2ID, &projects.ApplyProjectRequest{CoverLetter: "Siap bekerja frontend"}, "INTERN")
+	app2, err := service.ApplyProject(ctx, project.ID, applicant2ID, &projects.ApplyProjectRequest{CoverLetter: "Siap bekerja frontend"})
 	require.NoError(t, err)
 
 	// 4. PM Menerima Pelamar 1 dan Pelamar 2 (Penguncian Kuota Atomik)

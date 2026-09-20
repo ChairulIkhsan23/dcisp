@@ -32,10 +32,19 @@ func (ctrl *Controller) HandleTerminalTap(c *gin.Context) {
 		return
 	}
 
+	// deviceID berasal dari middleware DeviceAuth (terminal terautentikasi).
+	// Fallback: header X-Device-ID juga diterima sebagai UUID langsung untuk kompatibilitas admin.
 	var deviceID *uuid.UUID
-	if devIDStr := c.GetHeader("X-Device-ID"); devIDStr != "" {
-		if parsed, err := uuid.Parse(devIDStr); err == nil {
-			deviceID = &parsed
+	if devVal, exists := c.Get(middleware.ContextDeviceIDKey); exists {
+		if devUUID, ok := devVal.(uuid.UUID); ok {
+			deviceID = &devUUID
+		}
+	}
+	if deviceID == nil {
+		if devIDStr := c.GetHeader("X-Device-ID"); devIDStr != "" {
+			if parsed, err := uuid.Parse(devIDStr); err == nil {
+				deviceID = &parsed
+			}
 		}
 	}
 
@@ -162,7 +171,7 @@ func (ctrl *Controller) StartWorkSession(c *gin.Context) {
 
 	session, err := ctrl.service.StartWorkSession(c.Request.Context(), userID, req.TaskID)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan presensi tidak dapat diproses", err)
 		return
 	}
 
@@ -190,7 +199,7 @@ func (ctrl *Controller) ProcessBreak(c *gin.Context) {
 
 	brk, err := ctrl.service.ProcessBreakAction(c.Request.Context(), userID, req.Action)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan presensi tidak dapat diproses", err)
 		return
 	}
 
@@ -217,7 +226,7 @@ func (ctrl *Controller) EndWorkSession(c *gin.Context) {
 
 	session, err := ctrl.service.EndWorkSession(c.Request.Context(), userID)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan presensi tidak dapat diproses", err)
 		return
 	}
 
@@ -241,7 +250,7 @@ func (ctrl *Controller) RequestOvertime(c *gin.Context) {
 
 	ot, err := ctrl.service.RequestOvertime(c.Request.Context(), userID, &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan presensi tidak dapat diproses", err)
 		return
 	}
 
@@ -267,7 +276,7 @@ func (ctrl *Controller) ReviewOvertime(c *gin.Context) {
 
 	ot, err := ctrl.service.ReviewOvertime(c.Request.Context(), id, &req, reviewerID)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan presensi tidak dapat diproses", err)
 		return
 	}
 
@@ -287,7 +296,7 @@ func (ctrl *Controller) RequestLeave(c *gin.Context) {
 
 	lr, err := ctrl.service.RequestLeave(c.Request.Context(), userID, &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan presensi tidak dapat diproses", err)
 		return
 	}
 
@@ -313,7 +322,7 @@ func (ctrl *Controller) ReviewLeave(c *gin.Context) {
 
 	lr, err := ctrl.service.ReviewLeave(c.Request.Context(), id, &req, reviewerID)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan presensi tidak dapat diproses", err)
 		return
 	}
 
@@ -333,7 +342,7 @@ func (ctrl *Controller) RequestCorrection(c *gin.Context) {
 
 	corr, err := ctrl.service.RequestCorrection(c.Request.Context(), userID, &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan presensi tidak dapat diproses", err)
 		return
 	}
 
@@ -359,7 +368,7 @@ func (ctrl *Controller) ReviewCorrection(c *gin.Context) {
 
 	corr, err := ctrl.service.ReviewCorrection(c.Request.Context(), id, &req, reviewerID)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan presensi tidak dapat diproses", err)
 		return
 	}
 
@@ -380,7 +389,7 @@ func (ctrl *Controller) RegisterDevice(c *gin.Context) {
 
 	dev, err := ctrl.service.RegisterDevice(c.Request.Context(), &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan presensi tidak dapat diproses", err)
 		return
 	}
 

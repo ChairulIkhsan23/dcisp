@@ -122,19 +122,9 @@ func main() {
 	r.Use(middleware.Recovery())
 	r.Use(middleware.AuditInterceptor(db))
 
-	// CORS Middleware
-	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Device-ID, X-DCISP-Signature")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-		c.Next()
-	})
+	// CORS berbasis allowlist + security headers (SECURITY.md Section 4.3, 4.4)
+	r.Use(middleware.SecurityHeaders(cfg))
+	r.Use(middleware.CORS(cfg))
 
 	// 7. System Health Probes
 	r.GET("/health/liveness", func(c *gin.Context) {
@@ -201,6 +191,7 @@ func main() {
 			protectedAuth.Use(middleware.AuthJWT(cfg))
 			{
 				protectedAuth.GET("/me", identityCtrl.GetMe)
+				protectedAuth.POST("/logout", identityCtrl.Logout)
 				protectedAuth.GET("/roles", middleware.RequirePermission(db, rdb, "system.roles", "view", "SYSTEM"), identityCtrl.GetRoles)
 			}
 		}
@@ -283,9 +274,11 @@ func main() {
 		// Attendance & Presensi (Domain 3: FR-007 s/d FR-015)
 		attendanceRoutes := apiV1.Group("/attendance")
 		{
-			// Terminal Tap & Offline Sync (FR-008, T-034, T-042)
-			attendanceRoutes.POST("/terminal-tap", attendanceCtrl.HandleTerminalTap)
-			attendanceRoutes.POST("/sync-offline", attendanceCtrl.SyncOffline)
+			// Terminal Tap & Offline Sync (FR-008, T-034, T-042):
+			// wajib otentikasi perangkat HMAC-SHA256 atau token operator (F-AUTH-01).
+			// Katalog audio tetap publik sesuai API.md (Public / Device).
+			attendanceRoutes.POST("/terminal-tap", middleware.DeviceAuth(db, cfg), attendanceCtrl.HandleTerminalTap)
+			attendanceRoutes.POST("/sync-offline", middleware.DeviceAuth(db, cfg), attendanceCtrl.SyncOffline)
 			attendanceRoutes.GET("/audio-catalog", attendanceCtrl.GetAudioCatalog)
 
 			// Protected Attendance endpoints

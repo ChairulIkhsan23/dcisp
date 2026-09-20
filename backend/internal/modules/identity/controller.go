@@ -68,6 +68,34 @@ func (ctrl *Controller) RefreshToken(c *gin.Context) {
 	})
 }
 
+// Menangani permintaan HTTP untuk mencabut sesi refresh token perangkat saat ini (logout).
+func (ctrl *Controller) Logout(c *gin.Context) {
+	userIDVal, exists := c.Get(middleware.ContextUserIDKey)
+	if !exists {
+		response.Unauthorized(c, "Pengguna tidak terautentikasi")
+		return
+	}
+	userID, ok := userIDVal.(uuid.UUID)
+	if !ok {
+		response.Unauthorized(c, "Konteks identitas pengguna tidak valid")
+		return
+	}
+
+	var req RefreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Payload logout tidak valid", err.Error())
+		return
+	}
+
+	if err := ctrl.service.Logout(c.Request.Context(), userID, req.RefreshToken); err != nil {
+		log.Printf("Kesalahan internal saat logout: %v", err)
+		response.InternalError(c, "Terjadi kesalahan pada server saat logout")
+		return
+	}
+
+	response.Success(c, http.StatusOK, "Logout berhasil, sesi perangkat dicabut", nil)
+}
+
 // Menangani permintaan HTTP untuk mengambil profil pengguna yang sedang terautentikasi.
 func (ctrl *Controller) GetMe(c *gin.Context) {
 	userIDVal, exists := c.Get(middleware.ContextUserIDKey)

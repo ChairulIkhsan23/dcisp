@@ -59,7 +59,11 @@ func (b *EventBus) Subscribe(eventType string, handler EventHandler) {
 	b.listeners[eventType] = append(b.listeners[eventType], handler)
 }
 
-// Mempublikasikan peristiwa domain baru secara asinkron ke antrean worker dan pendengar lokal.
+// Mempublikasikan peristiwa domain baru melalui satu jalur dispatch otoritatif (F-EVT-01).
+// Jalur utama adalah antrean persistent Asynq yang diproses worker dan didispatch
+// ulang ke pendengar lokal; dispatch lokal langsung hanya menjadi fallback ketika
+// worker pool tidak tersedia atau antrean gagal, sehingga satu event tidak pernah
+// diproses dua kali oleh jalur yang berbeda.
 func (b *EventBus) Publish(ctx context.Context, event DomainEvent) error {
 	if event.ID == uuid.Nil {
 		event.ID = uuid.New()
@@ -68,18 +72,19 @@ func (b *EventBus) Publish(ctx context.Context, event DomainEvent) error {
 		event.OccurredAt = time.Now().UTC()
 	}
 
-	// 1. Dispatch ke listener lokal segera (untuk SSE stream atau notifikasi in-process)
+	// 1. Jalur otoritatif: antrean persistent Asynq (di-dispatch ke listener lokal oleh worker)
+	if b.workerPool != nil {
+		if _, err := b.workerPool.EnqueueTask(ctx, TaskTypeDomainEvent, event, worker.QueueDefault, 3, 0); err == nil {
+			return nil
+		} else {
+			log.Printf("Peringatan: antrean worker gagal, beralih ke dispatch lokal untuk event [%s]: %v", event.Type, err)
+		}
+	}
+
+	// 2. Fallback: dispatch lokal langsung (tanpa worker pool atau saat antrean gagal)
 	go func(ev DomainEvent) {
 		_ = b.dispatchLocal(context.Background(), ev)
 	}(event)
-
-	// 2. Jika worker pool aktif, masukkan ke antrean persistent Asynq
-	if b.workerPool != nil {
-		_, err := b.workerPool.EnqueueTask(ctx, TaskTypeDomainEvent, event, worker.QueueDefault, 3, 0)
-		if err != nil {
-			return fmt.Errorf("gagal memasukkan event ke antrean worker: %w", err)
-		}
-	}
 
 	return nil
 }

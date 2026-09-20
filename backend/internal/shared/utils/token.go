@@ -21,6 +21,7 @@ type JWTClaims struct {
 	Roles     []string  `json:"roles,omitempty"`
 	Scopes    []string  `json:"scopes"`
 	TokenType string    `json:"type"`
+	TokenID   string    `json:"jti,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -59,13 +60,14 @@ func GenerateTokenPair(secret string, accessMinutes, refreshDays int, userID uui
 		return nil, fmt.Errorf("gagal menandatangani token akses: %w", err)
 	}
 
-	// 2. Refresh Token
+	// 2. Refresh Token (membawa TokenID unik untuk rotasi dan revocation)
 	refreshClaims := &JWTClaims{
 		UserID:    userID,
 		Email:     email,
 		Role:      role,
 		Scopes:    scopes,
 		TokenType: TokenTypeRefresh,
+		TokenID:   uuid.NewString(),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(refreshExpiry),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -124,4 +126,16 @@ func ValidateToken(secret, tokenString, expectedType string) (*JWTClaims, error)
 	}
 
 	return nil, errors.New("token tidak valid")
+}
+
+// Memvalidasi token refresh sekaligus memastikan klaim TokenID tersedia untuk rotasi sesi.
+func ValidateRefreshToken(secret, tokenString string) (*JWTClaims, error) {
+	claims, err := ValidateToken(secret, tokenString, TokenTypeRefresh)
+	if err != nil {
+		return nil, err
+	}
+	if claims.TokenID == "" {
+		return nil, errors.New("refresh token lawas tanpa identitas sesi tidak didukung, silakan login ulang")
+	}
+	return claims, nil
 }

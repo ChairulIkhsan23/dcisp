@@ -38,17 +38,17 @@ func (ctrl *Controller) CreateProject(c *gin.Context) {
 	p, err := ctrl.service.CreateProject(c.Request.Context(), ownerID, &req)
 	if err != nil {
 		log.Printf("Gagal membuat proyek: %v", err)
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 
 	response.Success(c, http.StatusCreated, "Proyek berhasil diterbitkan", p)
 }
 
-// Menangani permintaan HTTP untuk menampilkan bursa proyek dengan penyaringan visibilitas berdasarkan peran.
+// Menangani permintaan HTTP untuk menampilkan bursa proyek dengan penyaringan visibilitas berbasis izin dinamis.
 func (ctrl *Controller) ListProjects(c *gin.Context) {
-	roleVal, _ := c.Get(middleware.ContextRoleKey)
-	role, _ := roleVal.(string)
+	val, _ := c.Get(middleware.ContextUserIDKey)
+	userID, _ := val.(uuid.UUID)
 
 	status := c.Query("status")
 	search := c.Query("q")
@@ -56,7 +56,7 @@ func (ctrl *Controller) ListProjects(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 
-	projects, total, err := ctrl.service.ListProjects(c.Request.Context(), role, status, search, vis, page, limit)
+	projects, total, err := ctrl.service.ListProjects(c.Request.Context(), userID, status, search, vis, page, limit)
 	if err != nil {
 		log.Printf("Gagal mengambil bursa proyek: %v", err)
 		response.InternalError(c, "Terjadi kesalahan saat mengambil bursa proyek")
@@ -78,8 +78,6 @@ func (ctrl *Controller) ListProjects(c *gin.Context) {
 func (ctrl *Controller) GetProjectByID(c *gin.Context) {
 	val, _ := c.Get(middleware.ContextUserIDKey)
 	userID, _ := val.(uuid.UUID)
-	roleVal, _ := c.Get(middleware.ContextRoleKey)
-	role, _ := roleVal.(string)
 
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -87,9 +85,9 @@ func (ctrl *Controller) GetProjectByID(c *gin.Context) {
 		return
 	}
 
-	p, err := ctrl.service.GetProjectByID(c.Request.Context(), id, userID, role)
+	p, err := ctrl.service.GetProjectByID(c.Request.Context(), id, userID)
 	if err != nil {
-		response.NotFound(c, err.Error())
+		response.SafeNotFound(c, "Data tidak ditemukan", err)
 		return
 	}
 
@@ -115,7 +113,7 @@ func (ctrl *Controller) UpdateProject(c *gin.Context) {
 
 	p, err := ctrl.service.UpdateProject(c.Request.Context(), id, &req, userID)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 
@@ -130,8 +128,6 @@ func (ctrl *Controller) UpdateProject(c *gin.Context) {
 func (ctrl *Controller) ApplyProject(c *gin.Context) {
 	val, _ := c.Get(middleware.ContextUserIDKey)
 	userID, _ := val.(uuid.UUID)
-	roleVal, _ := c.Get(middleware.ContextRoleKey)
-	role, _ := roleVal.(string)
 
 	projectID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -142,9 +138,9 @@ func (ctrl *Controller) ApplyProject(c *gin.Context) {
 	var req ApplyProjectRequest
 	_ = c.ShouldBindJSON(&req)
 
-	app, err := ctrl.service.ApplyProject(c.Request.Context(), projectID, userID, &req, role)
+	app, err := ctrl.service.ApplyProject(c.Request.Context(), projectID, userID, &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 
@@ -184,7 +180,7 @@ func (ctrl *Controller) ReviewApplication(c *gin.Context) {
 
 	app, err := ctrl.service.ReviewApplication(c.Request.Context(), appID, req.Action)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 
@@ -227,7 +223,7 @@ func (ctrl *Controller) FinalizePlannedContribution(c *gin.Context) {
 	}
 
 	if err := ctrl.service.FinalizePlannedContribution(c.Request.Context(), projectID, &req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 
@@ -244,7 +240,7 @@ func (ctrl *Controller) CalculateActualContribution(c *gin.Context) {
 
 	members, err := ctrl.service.CalculateActualContribution(c.Request.Context(), projectID)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 
@@ -269,7 +265,7 @@ func (ctrl *Controller) FinalizeContribution(c *gin.Context) {
 	}
 
 	if err := ctrl.service.FinalizeContribution(c.Request.Context(), projectID, &req, supervisorID); err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 
@@ -296,7 +292,7 @@ func (ctrl *Controller) CreateMilestone(c *gin.Context) {
 
 	m, err := ctrl.service.CreateMilestone(c.Request.Context(), projectID, &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 
@@ -340,7 +336,7 @@ func (ctrl *Controller) CreateTask(c *gin.Context) {
 
 	task, err := ctrl.service.CreateTask(c.Request.Context(), projectID, &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 
@@ -423,7 +419,7 @@ func (ctrl *Controller) ChangeTaskStatus(c *gin.Context) {
 
 	task, err := ctrl.service.ChangeTaskStatus(c.Request.Context(), taskID, req.Status)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 
@@ -453,7 +449,7 @@ func (ctrl *Controller) SubmitWorkReport(c *gin.Context) {
 
 	rep, err := ctrl.service.SubmitWorkReport(c.Request.Context(), taskID, userID, &req)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 
@@ -476,7 +472,7 @@ func (ctrl *Controller) ReviewWorkReport(c *gin.Context) {
 
 	rep, err := ctrl.service.ReviewWorkReport(c.Request.Context(), reportID, req.Action)
 	if err != nil {
-		response.BadRequest(c, err.Error())
+		response.SafeBadRequest(c, "Permintaan proyek tidak dapat diproses", err)
 		return
 	}
 

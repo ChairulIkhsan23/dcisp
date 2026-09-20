@@ -91,6 +91,55 @@ func TestPresignedUploadAndValidation(t *testing.T) {
 	assert.Contains(t, downloadURL, "X-Amz-Signature=")
 }
 
+// Menguji pengerasan validasi unggahan: allowlist MIME, batas avatar 5MB, sanitasi nama berkas, dan clamp TTL unduhan (F-UPL-01).
+func TestUploadValidationHardening(t *testing.T) {
+	_ = godotenv.Overload("../../.env")
+	cfg, err := config.LoadConfig()
+	require.NoError(t, err)
+
+	db, err := database.NewPostgresDB(cfg)
+	require.NoError(t, err)
+	defer db.Close()
+
+	service := documents.NewStorageService(db, cfg)
+	ctx := context.Background()
+
+	// 1. MIME di luar allowlist ditolak (application/zip)
+	_, err = service.GeneratePresignedUpload(ctx, &documents.PresignedUploadRequest{
+		Folder: "task-evidence", Filename: "arsip.zip", MimeType: "application/zip", SizeBytes: 1024,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tipe berkas tidak diizinkan")
+
+	// 2. Avatar profil di atas 5MB ditolak meskipun di bawah 25MB
+	_, err = service.GeneratePresignedUpload(ctx, &documents.PresignedUploadRequest{
+		Folder: "profile", Filename: "foto.png", MimeType: "image/png", SizeBytes: 6 * 1024 * 1024,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "5 MB")
+
+	// 3. Avatar profil 1MB diterima
+	avatarRes, err := service.GeneratePresignedUpload(ctx, &documents.PresignedUploadRequest{
+		Folder: "profile", Filename: "foto.png", MimeType: "image/png", SizeBytes: 1024 * 1024,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM file_metadata WHERE id = $1", avatarRes.FileID)
+	})
+
+	// 4. Nama berkas dengan path traversal ditolak
+	_, err = service.GeneratePresignedUpload(ctx, &documents.PresignedUploadRequest{
+		Folder: "attachments", Filename: "../../etc/passwd", MimeType: "image/png", SizeBytes: 1024,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "karakter path")
+
+	// 5. TTL unduhan arbitrer di-clamp ke batas server 3600 detik
+	clampedURL, err := service.GeneratePresignedDownload(ctx, avatarRes.FileID, 999999)
+	require.NoError(t, err)
+	assert.Contains(t, clampedURL, "X-Amz-Expires=3600")
+}
+
 // Menguji konektivitas langsung ke Cloudflare R2 dengan mengunggah dan mengunduh berkas uji melalui presigned URL.
 func TestR2LiveConnection(t *testing.T) {
 	_ = godotenv.Overload("../../.env")
@@ -104,11 +153,11 @@ func TestR2LiveConnection(t *testing.T) {
 	service := documents.NewStorageService(db, cfg)
 	ctx := context.Background()
 
-	testContent := []byte("DCISP R2 Live Connection Verification: SUCCESS!")
+	testContent := []byte("%PDF-1.4 DCISP R2 Live Connection Verification: SUCCESS!")
 	req := &documents.PresignedUploadRequest{
 		Folder:    "attachments",
-		Filename:  "live_check.txt",
-		MimeType:  "text/plain",
+		Filename:  "live_check.pdf",
+		MimeType:  "application/pdf",
 		SizeBytes: int64(len(testContent)),
 	}
 
@@ -122,7 +171,7 @@ func TestR2LiveConnection(t *testing.T) {
 	// 1. Eksekusi HTTP PUT langsung ke upload_url R2
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPut, res.UploadURL, bytes.NewReader(testContent))
 	require.NoError(t, err)
-	httpReq.Header.Set("Content-Type", "text/plain")
+	httpReq.Header.Set("Content-Type", "application/pdf")
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(httpReq)

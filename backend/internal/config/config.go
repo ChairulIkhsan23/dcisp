@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -30,6 +31,7 @@ type Config struct {
 	R2PublicURL              string
 	APIIndonesiaBaseURL      string
 	APIIndonesiaKey          string
+	AllowedOrigins           []string
 }
 
 // Memuat seluruh konfigurasi aplikasi dari environment variable dan memvalidasi konfigurasi wajib.
@@ -65,6 +67,7 @@ func LoadConfig() (*Config, error) {
 		R2PublicURL:              getEnv("R2_PUBLIC_URL", "https://pub-r2.dcisp.internal"),
 		APIIndonesiaBaseURL:      getEnv("API_INDONESIA_BASE_URL", "https://use.apiindonesia.id"),
 		APIIndonesiaKey:          getEnv("API_INDONESIA_KEY", ""),
+		AllowedOrigins:           getEnvAsList("APP_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
 	}, nil
 }
 
@@ -83,4 +86,22 @@ func getEnvAsInt(key string, fallback int) int {
 		return value
 	}
 	return fallback
+}
+
+// Mengambil nilai environment variable dalam format daftar dipisahkan koma (contoh origin CORS).
+func getEnvAsList(key string, fallback []string) []string {
+	rawValue, exists := os.LookupEnv(key)
+	if !exists || strings.TrimSpace(rawValue) == "" {
+		return fallback
+	}
+	var list []string
+	for _, item := range strings.Split(rawValue, ",") {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			list = append(list, trimmed)
+		}
+	}
+	if len(list) == 0 {
+		return fallback
+	}
+	return list
 }

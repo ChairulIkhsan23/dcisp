@@ -3,15 +3,20 @@ package tests
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
 	"dcisp/backend/internal/config"
 	"dcisp/backend/internal/database"
+	"dcisp/backend/internal/middleware"
 	"dcisp/backend/internal/modules/attendance"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -19,6 +24,27 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// Menandatangani permintaan terminal uji sesuai skema kanonis device-auth
+// (HMAC-SHA256 dengan kunci hash API terminal).
+func signTestDeviceRequest(rawAPIKey, method, path, timestamp string, body []byte) (deviceToken, signature string) {
+	hashSum := sha256.Sum256([]byte(rawAPIKey))
+	deviceToken = hex.EncodeToString(hashSum[:])
+	mac := hmac.New(sha256.New, []byte(deviceToken))
+	mac.Write([]byte(method + path + timestamp + string(body)))
+	signature = hex.EncodeToString(mac.Sum(nil))
+	return deviceToken, signature
+}
+
+// Menyematkan header otentikasi perangkat yang sah pada permintaan HTTP pengujian.
+func setTestDeviceHeaders(req *http.Request, terminalID, rawAPIKey, path string, body []byte) {
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	_, signature := signTestDeviceRequest(rawAPIKey, http.MethodPost, path, timestamp, body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Device-ID", terminalID)
+	req.Header.Set("X-Timestamp", timestamp)
+	req.Header.Set("X-DCISP-Signature", signature)
+}
 
 // Menguji ingesti presensi terminal tap, debouncing 30 detik, klasifikasi keterlambatan 3-tier, dan sinkronisasi offline (T-033, T-034, T-035, T-042).
 func TestAttendanceTerminalTapDebounceAndLateness(t *testing.T) {
@@ -40,10 +66,26 @@ func TestAttendanceTerminalTapDebounceAndLateness(t *testing.T) {
 	ctrl := attendance.NewController(service)
 
 	r := gin.New()
-	r.POST("/api/v1/attendance/terminal-tap", ctrl.HandleTerminalTap)
-	r.POST("/api/v1/attendance/sync-offline", ctrl.SyncOffline)
+	r.POST("/api/v1/attendance/terminal-tap", middleware.DeviceAuth(db, cfg), ctrl.HandleTerminalTap)
+	r.POST("/api/v1/attendance/sync-offline", middleware.DeviceAuth(db, cfg), ctrl.SyncOffline)
 
 	ctx := context.Background()
+
+	// Daftarkan terminal uji dengan kunci API yang diketahui
+	testTerminalID := fmt.Sprintf("TEST-GATE-%s", uuid.New().String()[:8])
+	testDeviceKey := "kunci-rahasia-terminal-uji-2026-min16"
+	_, err = service.RegisterDevice(ctx, &attendance.RegisterDeviceRequest{
+		TerminalIdentifier: testTerminalID,
+		DeviceType:         attendance.DeviceTypeESP32Terminal,
+		LocationName:       "Gerbang Uji Audit",
+		APIKey:             testDeviceKey,
+		CurrentMode:        attendance.TerminalModeAuto,
+	})
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM devices WHERE terminal_identifier = $1", testTerminalID)
+	})
 
 	// 1. Setup User akun dan Kartu Peserta
 	testUserID := uuid.New()
@@ -82,7 +124,7 @@ func TestAttendanceTerminalTapDebounceAndLateness(t *testing.T) {
 	}
 	bodyUnreg, _ := json.Marshal(unregPayload)
 	reqUnreg, _ := http.NewRequest(http.MethodPost, "/api/v1/attendance/terminal-tap", bytes.NewBuffer(bodyUnreg))
-	reqUnreg.Header.Set("Content-Type", "application/json")
+	setTestDeviceHeaders(reqUnreg, testTerminalID, testDeviceKey, "/api/v1/attendance/terminal-tap", bodyUnreg)
 	wUnreg := httptest.NewRecorder()
 	r.ServeHTTP(wUnreg, reqUnreg)
 
@@ -102,7 +144,7 @@ func TestAttendanceTerminalTapDebounceAndLateness(t *testing.T) {
 	}
 	bodyOnTime, _ := json.Marshal(tapOnTime)
 	reqOnTime, _ := http.NewRequest(http.MethodPost, "/api/v1/attendance/terminal-tap", bytes.NewBuffer(bodyOnTime))
-	reqOnTime.Header.Set("Content-Type", "application/json")
+	setTestDeviceHeaders(reqOnTime, testTerminalID, testDeviceKey, "/api/v1/attendance/terminal-tap", bodyOnTime)
 	wOnTime := httptest.NewRecorder()
 	r.ServeHTTP(wOnTime, reqOnTime)
 
@@ -117,7 +159,7 @@ func TestAttendanceTerminalTapDebounceAndLateness(t *testing.T) {
 	// 4. Uji Debouncing 30 Detik (BRULE-WF-013)
 	// Tap ulang kartu yang sama sesaat setelahnya (< 30 detik)
 	reqDebounce, _ := http.NewRequest(http.MethodPost, "/api/v1/attendance/terminal-tap", bytes.NewBuffer(bodyOnTime))
-	reqDebounce.Header.Set("Content-Type", "application/json")
+	setTestDeviceHeaders(reqDebounce, testTerminalID, testDeviceKey, "/api/v1/attendance/terminal-tap", bodyOnTime)
 	wDebounce := httptest.NewRecorder()
 	r.ServeHTTP(wDebounce, reqDebounce)
 
@@ -141,7 +183,7 @@ func TestAttendanceTerminalTapDebounceAndLateness(t *testing.T) {
 	}
 	bodyLate, _ := json.Marshal(tapLate)
 	reqLate, _ := http.NewRequest(http.MethodPost, "/api/v1/attendance/terminal-tap", bytes.NewBuffer(bodyLate))
-	reqLate.Header.Set("Content-Type", "application/json")
+	setTestDeviceHeaders(reqLate, testTerminalID, testDeviceKey, "/api/v1/attendance/terminal-tap", bodyLate)
 	wLate := httptest.NewRecorder()
 	r.ServeHTTP(wLate, reqLate)
 
@@ -177,7 +219,7 @@ func TestAttendanceTerminalTapDebounceAndLateness(t *testing.T) {
 	}
 	bodyOffline, _ := json.Marshal(offlinePayload)
 	reqOffline, _ := http.NewRequest(http.MethodPost, "/api/v1/attendance/sync-offline", bytes.NewBuffer(bodyOffline))
-	reqOffline.Header.Set("Content-Type", "application/json")
+	setTestDeviceHeaders(reqOffline, testTerminalID, testDeviceKey, "/api/v1/attendance/sync-offline", bodyOffline)
 	wOffline := httptest.NewRecorder()
 	r.ServeHTTP(wOffline, reqOffline)
 
@@ -189,6 +231,91 @@ func TestAttendanceTerminalTapDebounceAndLateness(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, respSync.Data.SyncedCount)
 	assert.Equal(t, 1, respSync.Data.SkippedCount) // Idempotency check berhasil
+}
+
+// Menguji penegakan otentikasi perangkat pada endpoint terminal presensi (F-AUTH-01, SECURITY.md Section 1.3).
+func TestDeviceAuthEnforcement(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	_ = godotenv.Overload("../../.env")
+	cfg, err := config.LoadConfig()
+	require.NoError(t, err)
+
+	db, err := database.NewPostgresDB(cfg)
+	require.NoError(t, err)
+	defer db.Close()
+
+	repo := attendance.NewRepository(db)
+	service := attendance.NewService(repo, db, nil, cfg, nil, nil)
+	ctrl := attendance.NewController(service)
+
+	r := gin.New()
+	r.POST("/api/v1/attendance/terminal-tap", middleware.DeviceAuth(db, cfg), ctrl.HandleTerminalTap)
+
+	ctx := context.Background()
+
+	testTerminalID := fmt.Sprintf("TEST-AUTH-%s", uuid.New().String()[:8])
+	testDeviceKey := "kunci-uji-otentikasi-perangkat-2026"
+	_, err = service.RegisterDevice(ctx, &attendance.RegisterDeviceRequest{
+		TerminalIdentifier: testTerminalID,
+		DeviceType:         attendance.DeviceTypeESP32Terminal,
+		LocationName:       "Gerbang Uji Otentikasi",
+		APIKey:             testDeviceKey,
+		CurrentMode:        attendance.TerminalModeAuto,
+	})
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_, _ = db.Pool.Exec(context.Background(), "DELETE FROM devices WHERE terminal_identifier = $1", testTerminalID)
+	})
+
+	buildTap := func() []byte {
+		body, _ := json.Marshal(attendance.TerminalTapRequest{CardUID: "UNKNOWN-CARD-AUTH-PROBE"})
+		return body
+	}
+	const tapPath = "/api/v1/attendance/terminal-tap"
+
+	// 1. Tanpa header otentikasi sama sekali -> 401 dan tanpa mutasi
+	body := buildTap()
+	reqNoAuth, _ := http.NewRequest(http.MethodPost, tapPath, bytes.NewBuffer(body))
+	reqNoAuth.Header.Set("Content-Type", "application/json")
+	wNoAuth := httptest.NewRecorder()
+	r.ServeHTTP(wNoAuth, reqNoAuth)
+	assert.Equal(t, http.StatusUnauthorized, wNoAuth.Code)
+
+	// 2. Tanda tangan salah -> 401
+	reqBadSig, _ := http.NewRequest(http.MethodPost, tapPath, bytes.NewBuffer(body))
+	setTestDeviceHeaders(reqBadSig, testTerminalID, testDeviceKey, tapPath, body)
+	reqBadSig.Header.Set("X-DCISP-Signature", "deadbeef")
+	wBadSig := httptest.NewRecorder()
+	r.ServeHTTP(wBadSig, reqBadSig)
+	assert.Equal(t, http.StatusUnauthorized, wBadSig.Code)
+
+	// 3. Terminal tidak terdaftar -> 401
+	reqUnknownDev, _ := http.NewRequest(http.MethodPost, tapPath, bytes.NewBuffer(body))
+	setTestDeviceHeaders(reqUnknownDev, "TERMINAL-TIDAK-ADA", testDeviceKey, tapPath, body)
+	wUnknownDev := httptest.NewRecorder()
+	r.ServeHTTP(wUnknownDev, reqUnknownDev)
+	assert.Equal(t, http.StatusUnauthorized, wUnknownDev.Code)
+
+	// 4. Stempel waktu kedaluwarsa (>60 detik) -> 401 (anti-replay)
+	expiredTS := strconv.FormatInt(time.Now().Unix()-300, 10)
+	_, expiredSig := signTestDeviceRequest(testDeviceKey, http.MethodPost, tapPath, expiredTS, body)
+	reqExpired, _ := http.NewRequest(http.MethodPost, tapPath, bytes.NewBuffer(body))
+	reqExpired.Header.Set("Content-Type", "application/json")
+	reqExpired.Header.Set("X-Device-ID", testTerminalID)
+	reqExpired.Header.Set("X-Timestamp", expiredTS)
+	reqExpired.Header.Set("X-DCISP-Signature", expiredSig)
+	wExpired := httptest.NewRecorder()
+	r.ServeHTTP(wExpired, reqExpired)
+	assert.Equal(t, http.StatusUnauthorized, wExpired.Code)
+
+	// 5. Tanda tangan valid -> lolos middleware (404 kartu tak terdaftar, bukan 401)
+	reqValid, _ := http.NewRequest(http.MethodPost, tapPath, bytes.NewBuffer(body))
+	setTestDeviceHeaders(reqValid, testTerminalID, testDeviceKey, tapPath, body)
+	wValid := httptest.NewRecorder()
+	r.ServeHTTP(wValid, reqValid)
+	assert.Equal(t, http.StatusNotFound, wValid.Code)
+	assert.Contains(t, wValid.Body.String(), attendance.AudioCardUnregistered)
 }
 
 // Menguji pembuatan dan validasi kode QR dinamis dengan masa berlaku ketat 30 detik (T-043, BRULE-WF-014).

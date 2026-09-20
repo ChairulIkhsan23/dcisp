@@ -139,8 +139,49 @@ func (s *Service) CreateProject(ctx context.Context, ownerID uuid.UUID, req *Cre
 	return project, nil
 }
 
-// Mengambil daftar proyek bursa dengan penegakan batasan visibilitas berdasarkan peran pengguna (FR-016, BR-003).
-func (s *Service) ListProjects(ctx context.Context, requesterRole string, status, search, requestedVis string, page, limit int) ([]Project, int, error) {
+// Menghitung visibilitas proyek yang diizinkan bagi pengguna murni dari tabel permissions (BR-001).
+// Matriks cakupan (didefinisikan oleh data seed 000007, bukan string peran di kode):
+//   - aksi view_private (cakupan SYSTEM/ASSIGNED_PROJECTS) -> INTERN_ONLY + PUBLIC + PRIVATE
+//   - aksi view (cakupan selain PUBLIC_DATA)                -> INTERN_ONLY + PUBLIC
+//   - aksi view (hanya cakupan PUBLIC_DATA, BR-003)         -> PUBLIC saja
+//   - tanpa izin view                                        -> tidak ada visibilitas
+func (s *Service) allowedVisibilities(ctx context.Context, userID uuid.UUID) ([]string, bool, error) {
+	perms, err := s.repo.GetUserProjectPermissions(ctx, userID)
+	if err != nil {
+		return nil, false, err
+	}
+
+	hasView := false
+	viewPublicOnly := true
+	canViewPrivate := false
+	for _, perm := range perms {
+		action := strings.ToLower(perm.Action)
+		scope := strings.ToUpper(perm.ScopeType)
+		if action == "*" || action == "view" {
+			hasView = true
+			if scope != "PUBLIC_DATA" {
+				viewPublicOnly = false
+			}
+		}
+		if (action == "*" || action == "view_private") && (scope == "SYSTEM" || scope == "ASSIGNED_PROJECTS") {
+			canViewPrivate = true
+		}
+	}
+
+	if !hasView {
+		return []string{}, false, nil
+	}
+	if canViewPrivate {
+		return []string{VisibilityInternOnly, VisibilityPublic, VisibilityPrivate}, true, nil
+	}
+	if viewPublicOnly {
+		return []string{VisibilityPublic}, false, nil
+	}
+	return []string{VisibilityInternOnly, VisibilityPublic}, false, nil
+}
+
+// Mengambil daftar proyek bursa dengan penegakan batasan visibilitas berbasis izin dinamis (FR-016, BR-001, BR-003).
+func (s *Service) ListProjects(ctx context.Context, userID uuid.UUID, status, search, requestedVis string, page, limit int) ([]Project, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -149,24 +190,35 @@ func (s *Service) ListProjects(ctx context.Context, requesterRole string, status
 	}
 	offset := (page - 1) * limit
 
-	// Penegakan aturan visibilitas (BR-003): Alumni hanya boleh mengakses proyek bertipe PUBLIC
-	var allowedVisibilities []string
-	if strings.EqualFold(requesterRole, "ALUMNI") {
-		allowedVisibilities = []string{VisibilityPublic}
-	} else if strings.EqualFold(requesterRole, "INTERN") {
-		allowedVisibilities = []string{VisibilityInternOnly, VisibilityPublic}
-	} else {
-		// Admin, PM, Super Admin dapat melihat semua
-		if requestedVis != "" {
-			allowedVisibilities = []string{strings.ToUpper(requestedVis)}
+	allowedVisibilities, _, err := s.allowedVisibilities(ctx, userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(allowedVisibilities) == 0 {
+		return []Project{}, 0, nil
+	}
+
+	// Filter visibilitas yang diminta wajib berada dalam izin pengguna
+	if requestedVis != "" {
+		reqVis := strings.ToUpper(requestedVis)
+		permitted := false
+		for _, vis := range allowedVisibilities {
+			if vis == reqVis {
+				permitted = true
+				break
+			}
 		}
+		if !permitted {
+			return []Project{}, 0, nil
+		}
+		allowedVisibilities = []string{reqVis}
 	}
 
 	return s.repo.ListProjects(ctx, allowedVisibilities, status, search, limit, offset)
 }
 
-// Mengambil detail satu proyek setelah memvalidasi izin visibilitas pemohon.
-func (s *Service) GetProjectByID(ctx context.Context, id uuid.UUID, requesterID uuid.UUID, requesterRole string) (*Project, error) {
+// Mengambil detail satu proyek setelah memvalidasi izin visibilitas pemohon dari tabel permissions.
+func (s *Service) GetProjectByID(ctx context.Context, id uuid.UUID, requesterID uuid.UUID) (*Project, error) {
 	p, err := s.repo.GetProjectByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -175,15 +227,33 @@ func (s *Service) GetProjectByID(ctx context.Context, id uuid.UUID, requesterID 
 		return nil, errors.New("proyek tidak ditemukan")
 	}
 
-	// Pemeriksaan hak akses visibilitas
-	if strings.EqualFold(requesterRole, "ALUMNI") && p.Visibility != VisibilityPublic {
-		return nil, errors.New("akses ditolak: alumni hanya dapat mengakses proyek dengan visibilitas PUBLIC (BR-003)")
+	allowedVisibilities, canViewPrivate, err := s.allowedVisibilities(ctx, requesterID)
+	if err != nil {
+		return nil, err
 	}
+
+	// Proyek PRIVATE: keanggotaan tim, kepemilikan, atau izin view_private
+	// sudah cukup sebagai otorisasi tanpa bergantung pada izin direktori bursa.
 	if p.Visibility == VisibilityPrivate {
+		if canViewPrivate {
+			return p, nil
+		}
 		isMember, _ := s.repo.GetTeamMember(ctx, p.ID, requesterID)
-		if isMember == nil && p.OwnerID != requesterID && !strings.Contains(strings.ToUpper(requesterRole), "ADMIN") {
+		if isMember == nil && p.OwnerID != requesterID {
 			return nil, errors.New("akses ditolak: proyek ini bersifat PRIVATE")
 		}
+		return p, nil
+	}
+
+	visible := false
+	for _, vis := range allowedVisibilities {
+		if vis == p.Visibility {
+			visible = true
+			break
+		}
+	}
+	if !visible {
+		return nil, errors.New("akses ditolak: anda tidak memiliki izin visibilitas untuk proyek ini")
 	}
 
 	return p, nil
@@ -243,7 +313,7 @@ func (s *Service) UpdateProject(ctx context.Context, id uuid.UUID, req *UpdatePr
 // ============================================================================
 
 // Mengajukan lamaran pada proyek dengan kalkulasi skor kecocokan keahlian informatif (advisory only).
-func (s *Service) ApplyProject(ctx context.Context, projectID, userID uuid.UUID, req *ApplyProjectRequest, userRole string) (*ProjectApplication, error) {
+func (s *Service) ApplyProject(ctx context.Context, projectID, userID uuid.UUID, req *ApplyProjectRequest) (*ProjectApplication, error) {
 	project, err := s.repo.GetProjectByID(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -256,9 +326,20 @@ func (s *Service) ApplyProject(ctx context.Context, projectID, userID uuid.UUID,
 		return nil, fmt.Errorf("proyek saat ini tidak membuka lamaran (status: %s)", project.Status)
 	}
 
-	// Pemeriksaan batasan visibilitas peran alumni
-	if strings.EqualFold(userRole, "ALUMNI") && project.Visibility != VisibilityPublic {
-		return nil, errors.New("alumni hanya dapat melamar pada proyek dengan visibilitas PUBLIC (BR-003)")
+	// Pemeriksaan batasan visibilitas berbasis izin dinamis (BR-001, BR-003)
+	allowedVisibilities, _, err := s.allowedVisibilities(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	visible := false
+	for _, vis := range allowedVisibilities {
+		if vis == project.Visibility {
+			visible = true
+			break
+		}
+	}
+	if !visible {
+		return nil, errors.New("akses ditolak: peran anda tidak diizinkan melamar pada visibilitas proyek ini")
 	}
 
 	// Cek apakah sudah pernah melamar
@@ -797,6 +878,25 @@ func (s *Service) ReviewWorkReport(ctx context.Context, reportID uuid.UUID, acti
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("gagal melakukan commit ulasan laporan tugas: %w", err)
+	}
+
+	// Menerbitkan event ulasan laporan agar mesin XP proyek memprosesnya asinkron (F-EVT-02).
+	// Hanya laporan APPROVED yang dikredit; payload memakai float64 agar konsisten
+	// setelah serialisasi JSON antrean worker.
+	if upperAction == "APPROVE" && s.eventBus != nil {
+		if task, err := s.repo.GetTaskByID(ctx, rep.TaskID); err == nil && task != nil && task.AssigneeID != nil {
+			_ = s.eventBus.Publish(ctx, eventbus.DomainEvent{
+				Type:        "task.report_reviewed",
+				AggregateID: rep.TaskID.String(),
+				Payload: map[string]interface{}{
+					"status":            "APPROVED",
+					"task_id":           rep.TaskID.String(),
+					"assignee_id":       task.AssigneeID.String(),
+					"difficulty_weight": float64(task.DifficultyWeight),
+					"report_id":         rep.ID.String(),
+				},
+			})
+		}
 	}
 
 	return rep, nil

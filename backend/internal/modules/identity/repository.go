@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"dcisp/backend/internal/database"
 	"github.com/google/uuid"
@@ -17,6 +18,72 @@ type Repository struct {
 // Menginisialisasi instance baru identity repository.
 func NewRepository(db *database.PostgresDB) *Repository {
 	return &Repository{db: db}
+}
+
+// RefreshSession adalah proyeksi sesi refresh token tersimpan (hash, bukan token mentah).
+type RefreshSession struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	TokenHash string
+	ExpiresAt time.Time
+	RevokedAt *time.Time
+}
+
+// Menyimpan sesi refresh token baru (hanya hash SHA-256 token, SECURITY.md Section 1.2).
+func (r *Repository) CreateRefreshSession(ctx context.Context, userID uuid.UUID, tokenHash string, expiresAt time.Time) (*RefreshSession, error) {
+	var s RefreshSession
+	err := r.db.Pool.QueryRow(ctx, `
+		INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at, created_at)
+		VALUES (gen_random_uuid(), $1, $2, $3, CURRENT_TIMESTAMP)
+		RETURNING id, user_id, token_hash, expires_at, revoked_at
+	`, userID, tokenHash, expiresAt).Scan(&s.ID, &s.UserID, &s.TokenHash, &s.ExpiresAt, &s.RevokedAt)
+	if err != nil {
+		return nil, fmt.Errorf("gagal menyimpan sesi refresh: %w", err)
+	}
+	return &s, nil
+}
+
+// Mengambil sesi refresh aktif berdasarkan hash tokennya.
+func (r *Repository) FindActiveRefreshSession(ctx context.Context, tokenHash string) (*RefreshSession, error) {
+	var s RefreshSession
+	err := r.db.Pool.QueryRow(ctx, `
+		SELECT id, user_id, token_hash, expires_at, revoked_at
+		FROM refresh_sessions
+		WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+	`, tokenHash).Scan(&s.ID, &s.UserID, &s.TokenHash, &s.ExpiresAt, &s.RevokedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("gagal mencari sesi refresh: %w", err)
+	}
+	return &s, nil
+}
+
+// Mencabut satu sesi refresh token berdasarkan hash tokennya (logout per perangkat).
+func (r *Repository) RevokeRefreshSession(ctx context.Context, tokenHash string) error {
+	_, err := r.db.Pool.Exec(ctx, `
+		UPDATE refresh_sessions
+		SET revoked_at = CURRENT_TIMESTAMP
+		WHERE token_hash = $1 AND revoked_at IS NULL
+	`, tokenHash)
+	if err != nil {
+		return fmt.Errorf("gagal mencabut sesi refresh: %w", err)
+	}
+	return nil
+}
+
+// Mencabut seluruh sesi refresh aktif milik pengguna (dipakai saat penonaktifan akun paksa).
+func (r *Repository) RevokeAllUserRefreshSessions(ctx context.Context, userID uuid.UUID) (int64, error) {
+	cmdTag, err := r.db.Pool.Exec(ctx, `
+		UPDATE refresh_sessions
+		SET revoked_at = CURRENT_TIMESTAMP
+		WHERE user_id = $1 AND revoked_at IS NULL
+	`, userID)
+	if err != nil {
+		return 0, fmt.Errorf("gagal mencabut seluruh sesi pengguna: %w", err)
+	}
+	return cmdTag.RowsAffected(), nil
 }
 
 // Mengambil data pengguna dari database berdasarkan alamat email terdaftar.

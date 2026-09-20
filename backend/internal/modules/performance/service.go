@@ -187,10 +187,15 @@ func (s *Service) RecordXPMutation(ctx context.Context, req *RecordXPMutationReq
 	}
 
 	// 4. Jika Skema Internship XP: Evaluasi Kenaikan Rank (T-056, NO AUTO-DEMOTION)
+	promotedRankID := uuid.Nil
 	if scheme == XPSchemeInternship {
+		oldLevel, _ := s.repo.GetInternRankLevelTx(ctx, tx, req.UserID)
 		eligibleRank, err := s.repo.GetRankByXP(ctx, newBalance)
 		if err == nil && eligibleRank != nil {
 			_ = s.repo.UpdateInternRankTx(ctx, tx, req.UserID, eligibleRank.ID, newBalance)
+			if eligibleRank.LevelOrder > oldLevel {
+				promotedRankID = eligibleRank.ID
+			}
 		}
 	} else if scheme == XPSchemeAlumni {
 		// Update saldo alumni_xp pada tabel alumni
@@ -213,6 +218,18 @@ func (s *Service) RecordXPMutation(ctx context.Context, req *RecordXPMutationReq
 				"event_trigger":   req.EventTrigger,
 			},
 		})
+
+		// Menerbitkan promosi rank agar penerbit reward menindaklanjutinya (F-EVT-02).
+		if promotedRankID != uuid.Nil {
+			_ = s.eventBus.Publish(ctx, eventbus.DomainEvent{
+				Type:        "rank.promoted",
+				AggregateID: req.UserID.String(),
+				Payload: map[string]interface{}{
+					"user_id": req.UserID.String(),
+					"rank_id": promotedRankID.String(),
+				},
+			})
+		}
 	}
 
 	return txRecord, nil

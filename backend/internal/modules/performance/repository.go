@@ -239,6 +239,23 @@ func (r *Repository) GetNextRank(ctx context.Context, currentLevelOrder int) (*R
 	return &rk, nil
 }
 
+// Mengambil urutan level rank peserta magang saat ini (0 bila belum memiliki rank).
+func (r *Repository) GetInternRankLevelTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID) (int, error) {
+	var level int
+	err := tx.QueryRow(ctx, `
+		SELECT COALESCE((SELECT level_order FROM ranks WHERE id = interns.current_rank_id), 0)
+		FROM interns
+		WHERE user_id = $1
+	`, userID).Scan(&level)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("gagal mengambil level rank peserta: %w", err)
+	}
+	return level, nil
+}
+
 // Memperbarui rank dan XP peserta magang dengan penegakan aturan permanen tanpa penurunan otomatis (No Auto-Demotion).
 func (r *Repository) UpdateInternRankTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID, newRankID uuid.UUID, newXP int) error {
 	query := `

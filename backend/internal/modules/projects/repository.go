@@ -19,6 +19,35 @@ func NewRepository(db *database.PostgresDB) *Repository {
 	return &Repository{db: db}
 }
 
+// ProjectPermission adalah proyeksi izin marketplace proyek milik pengguna dari tabel permissions.
+type ProjectPermission struct {
+	Action    string
+	ScopeType string
+}
+
+// Mengambil seluruh izin marketplace proyek milik pengguna untuk evaluasi visibilitas dinamis (BR-001).
+func (r *Repository) GetUserProjectPermissions(ctx context.Context, userID uuid.UUID) ([]ProjectPermission, error) {
+	rows, err := r.db.Pool.Query(ctx, `
+		SELECT p.action, p.scope_type
+		FROM permissions p
+		JOIN user_roles ur ON ur.role_id = p.role_id
+		WHERE ur.user_id = $1 AND p.resource IN ('projects.marketplace', '*')
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengueri izin marketplace proyek: %w", err)
+	}
+	defer rows.Close()
+
+	var perms []ProjectPermission
+	for rows.Next() {
+		var perm ProjectPermission
+		if err := rows.Scan(&perm.Action, &perm.ScopeType); err == nil {
+			perms = append(perms, perm)
+		}
+	}
+	return perms, nil
+}
+
 // ============================================================================
 // 1. PROJECTS (FR-016)
 // ============================================================================

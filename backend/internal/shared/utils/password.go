@@ -27,8 +27,36 @@ var DefaultArgonParams = &ArgonParams{
 	KeyLength:   32,
 }
 
+// Memvalidasi kompleksitas kata sandi sesuai SECURITY.md Section 1.1:
+// minimal 8 karakter dengan huruf besar, huruf kecil, angka, dan karakter khusus.
+func ValidatePasswordComplexity(password string) error {
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
+	for _, r := range password {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			hasUpper = true
+		case r >= 'a' && r <= 'z':
+			hasLower = true
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		case r >= 32 && r <= 126:
+			hasSpecial = true
+		default:
+			hasSpecial = true
+		}
+	}
+	if len([]rune(password)) < 8 || !hasUpper || !hasLower || !hasDigit || !hasSpecial {
+		return errors.New("kata sandi minimal 8 karakter dan wajib memuat huruf besar, huruf kecil, angka, serta karakter khusus")
+	}
+	return nil
+}
+
 // Menghasilkan hash kata sandi yang aman menggunakan algoritma Argon2id.
 func HashPassword(password string) (string, error) {
+	if err := ValidatePasswordComplexity(password); err != nil {
+		return "", err
+	}
+
 	salt := make([]byte, DefaultArgonParams.SaltLength)
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("gagal menghasilkan salt acak: %w", err)
